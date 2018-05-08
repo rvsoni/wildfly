@@ -24,10 +24,9 @@ package org.jboss.as.clustering.infinispan.subsystem;
 
 import java.util.List;
 
-import org.infinispan.commons.api.BasicCacheContainer;
 import org.jboss.as.clustering.controller.CapabilityReference;
 import org.jboss.as.clustering.controller.CommonUnaryRequirement;
-import org.jboss.as.clustering.function.Consumers;
+import org.jboss.as.clustering.controller.SimpleResourceDescriptorConfigurator;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.PathAddress;
@@ -56,7 +55,7 @@ public class RemoteStoreResourceDefinition extends StoreResourceDefinition {
     static final PathElement PATH = pathElement("remote");
 
     enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        CACHE("cache", ModelType.STRING, new ModelNode(BasicCacheContainer.DEFAULT_CACHE_NAME)),
+        CACHE("cache", ModelType.STRING, null),
         SOCKET_TIMEOUT("socket-timeout", ModelType.LONG, new ModelNode(60000L)),
         TCP_NO_DELAY("tcp-no-delay", ModelType.BOOLEAN, new ModelNode(true)),
         SOCKET_BINDINGS("remote-servers")
@@ -66,7 +65,7 @@ public class RemoteStoreResourceDefinition extends StoreResourceDefinition {
         Attribute(String name, ModelType type, ModelNode defaultValue) {
             this.definition = new SimpleAttributeDefinitionBuilder(name, type)
                     .setAllowExpression(true)
-                    .setRequired(false)
+                    .setRequired(defaultValue == null)
                     .setDefaultValue(defaultValue)
                     .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     .setMeasurementUnit((type == ModelType.LONG) ? MeasurementUnit.MILLISECONDS : null)
@@ -113,8 +112,6 @@ public class RemoteStoreResourceDefinition extends StoreResourceDefinition {
     }
 
     RemoteStoreResourceDefinition() {
-        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, WILDCARD_PATH),
-                descriptor -> descriptor.addAttributes(Attribute.class),
-                address -> new RemoteStoreBuilder(address.getParent()), Consumers.empty());
+        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, WILDCARD_PATH), new SimpleResourceDescriptorConfigurator<>(Attribute.class), RemoteStoreBuilder::new);
     }
 }

@@ -1,6 +1,6 @@
+[[CLI_Recipes]]
 = CLI Recipes
 
-[[properties]]
 == Properties
 
 [[adding-reading-and-removing-system-property-using-cli]]
@@ -72,7 +72,6 @@ Domain
 [domain@IP_ADDRESS:9990 /] /host=master/server=server-one/core-service=platform-mbean/type=runtime:read-attribute(name=system-properties)
 ----
 
-[[configuration]]
 == Configuration
 
 [[list-subsystems]]
@@ -331,14 +330,52 @@ or
 [[deployment]]
 == Deployment
 
-[[undeploying-and-redeploying-multiple-deployments]]
-=== Undeploying and redeploying multiple deployments
+[[cli-deployment-command]]
+=== CLI _deployment_ command
 
-CLI offers a way to efficiently undeploy or redeploy deployments in one
-simple command.
+In addition to the legacy _deploy_, _undeploy_ and _deployment-info_ commands, 
+that stay un-changed, the CLI offers a _deployment_ command that properly
+separates the various use cases encountered when managing deployments. This command
+offers a simpler interface and should be the way to go when managing deployments.
+New features will be added thanks to the _deployment_ command, legacy commands will not evolve.
+This document contains a summary of the capabilities of this command, type _help deployment_
+to display the list of all available actions and _help deployment <action>_ for the detailed
+description of an action.
 
-* To disable all enabled deployments: _undeploy --keep-content *_
-* To redeploy all disabled deployments: _deploy --name=*_
+Actions to deploy some content:
+
+* _deployment deploy-file_: To deploy a file located on the file system.
+
+* _deployment deploy-url_: To deploy content referenced by an URL.
+
+* _deployment deploy-cli-achive_: To deploy some content thanks to a CLI archive
+(.cli file) located on the file system.
+
+Actions to enable some deployments:
+
+* _deployment enable_: To enable a given disabled deployment.
+
+* _deployment enable-all_: To enable all disabled deployments.
+
+Actions to disable some deployments:
+
+* _deployment disable_: To disable a given enabled deployment.
+
+* _deployment disable-all_: To disable all enabled deployments.
+
+Actions to undeploy some deployments:
+
+* _deployment undeploy_: To undeploy a given deployment and remove its content
+from the repository.
+
+* _deployment undeploy-cli-archive_: To undeploy some content using a CLI archive
+(.cli file) located on the file system.
+
+Actions to get information on some deployments:
+
+* _deployment info_: To display information about single or multiple deployments.
+
+* _deployment list_: To display all the existing deployments.
 
 [[incremental-deployment-with-the-cli]]
 === Incremental deployment with the CLI
@@ -460,3 +497,83 @@ attachment display --operation=/deployment=myapp:read-content(path=index.xhtml)
 * By default existing files will be preserved. Use the option
 _--overwrite_ to overwrite existing file.
 * _attachment_ can be used in batch mode.
+
+[[iteration-of-collections]]
+== Iteration of Collections
+
+The command _for_ allows to iterate the content of an operation result. As an
+example, this command can be used to display the content of the Manifest files
+present in all deployed applications. For example:
+
+[source, java]
+----
+for deployed in :read-children-names(child-type=deployment)
+ echo $deployed Manifest content
+ attachment display --operation=/deployment=$deployed:read-content(path=META-INF/MANIFEST.MF)
+done
+----
+When this _for_ block is executed, the content of all Manifest files is displayed in the CLI console.
+
+Tips
+
+[TIP]
+
+* The scope of the defined variable is limited to the _for_ block.
+* If a variable with the same name already exists, the _for_ command will print an error.
+* If the operation doesn't return a list, the _for_ command will print an error.
+* _for_ block can be discarded and not execute by adding the option _--discard_ to _done_.
+
+[[cli-security-commands]]
+== Security Commands
+
+CLi offers a _security_ command to group all security related management actions
+under a single command.
+
+* _security enable-ssl-management_: To enable SSL (elytron SSLContext) for the
+management interfaces. Type _help security enable-ssl-management_ for a
+complete description of the command.
+
+Among other ways to configure SSL, this command offers an interactive wizard to
+help you configure SSL by generating a self-signed certificate.
+Example of wizard usage:
+
+[source,java]
+----
+security enable-ssl-management --interactive
+Please provide required pieces of information to enable SSL:
+Key-store file name (default management.keystore):
+Password (blank generated):
+What is your first and last name? [Unknown]:
+What is the name of your organizational unit? [Unknown]:
+What is the name of your organization? [Unknown]:
+What is the name of your City or Locality? [Unknown]:
+What is the name of your State or Province? [Unknown]:
+What is the two-letter country code for this unit? [Unknown]:
+Is CN=Unknown, OU=Unknown, O=Unknown, L=Unknown, ST=Unknown, C=Unknown correct y/n [y]?
+Validity (in days, blank default):
+Alias (blank generated):
+Enable SSL Mutual Authentication y/n (blank n):n
+
+SSL options:
+key store file: management.keystore
+distinguished name: CN=Unknown, OU=Unknown, O=Unknown, L=Unknown, ST=Unknown, C=Unknown
+password: KRzne5s1
+validity: default
+alias: alias-265e6c6d-ff4e-4b8c-8f10-f015d678eb29
+Server keystore file management.keystore, certificate signing request management.csr and
+certificate file management.keystore.pem will be generated in server configuration directory.
+Do you confirm y/n :y
+----
+NB: Once the command is executed, the CLI will reload the server and reconnect to it.
+
+* _security disable-ssl-management_: To disable SSL (elytron SSLContext) for the
+management interfaces. Type _help security disable-ssl-management_ for
+a complete description of the command.
+
+* _security enable-ssl-http-server_: To enable SSL (elytron SSLContext) for the
+_undertow_ server. The same wizard as the _enable-ssl-management_ action is available.
+Type _help security enable-ssl-http-server_ for a complete description of the command.
+
+* _security disable-ssl-http-server_: To disable SSL (elytron SSLContext) for the
+_undertow_ server. Type _help security disable-ssl-http-server_ for a complete
+description of the command.

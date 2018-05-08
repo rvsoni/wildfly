@@ -34,7 +34,9 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 
 @ServerSetup(ConcurrentWebFailoverServerSetup.class)
 public class ConcurrentCoarseWebFailoverTestCase extends AbstractWebFailoverTestCase {
-    private static final String DEPLOYMENT_NAME = "coarse-concurrent-distributable.war";
+
+    private static final String MODULE_NAME = ConcurrentCoarseWebFailoverTestCase.class.getSimpleName();
+    private static final String DEPLOYMENT_NAME = MODULE_NAME + ".war";
 
     public ConcurrentCoarseWebFailoverTestCase() {
         super(DEPLOYMENT_NAME, TransactionMode.NON_TRANSACTIONAL);
@@ -42,13 +44,19 @@ public class ConcurrentCoarseWebFailoverTestCase extends AbstractWebFailoverTest
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
-    public static Archive<?> deployment0() {
+    public static Archive<?> deployment1() {
         return getDeployment();
     }
 
     @Deployment(name = DEPLOYMENT_2, managed = false, testable = false)
     @TargetsContainer(NODE_2)
-    public static Archive<?> deployment1() {
+    public static Archive<?> deployment2() {
+        return getDeployment();
+    }
+
+    @Deployment(name = DEPLOYMENT_3, managed = false, testable = false)
+    @TargetsContainer(NODE_3)
+    public static Archive<?> deployment3() {
         return getDeployment();
     }
 

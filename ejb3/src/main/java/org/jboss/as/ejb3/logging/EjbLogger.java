@@ -43,6 +43,7 @@ import javax.ejb.ConcurrentAccessTimeoutException;
 import javax.ejb.EJBAccessException;
 import javax.ejb.EJBException;
 import javax.ejb.EJBTransactionRequiredException;
+import javax.ejb.EJBTransactionRolledbackException;
 import javax.ejb.IllegalLoopbackException;
 import javax.ejb.LockType;
 import javax.ejb.NoMoreTimeoutsException;
@@ -100,6 +101,7 @@ import org.jboss.logging.annotations.LogMessage;
 import org.jboss.logging.annotations.Message;
 import org.jboss.logging.annotations.MessageLogger;
 import org.jboss.logging.annotations.Param;
+import org.jboss.logging.annotations.Signature;
 import org.jboss.metadata.ejb.spec.MethodParametersMetaData;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
@@ -553,7 +555,7 @@ public interface EjbLogger extends BasicLogger {
 
     @LogMessage(level = ERROR)
     @Message(id = 64, value = "Failed to set transaction for rollback only")
-    void failedToSetRollbackOnly(@Cause Exception e);
+    void failedToSetRollbackOnly(@Cause Throwable e);
 
     @Message(id = 65, value = "View interface cannot be null")
     IllegalArgumentException viewInterfaceCannotBeNull();
@@ -2931,7 +2933,8 @@ public interface EjbLogger extends BasicLogger {
     DeploymentUnitProcessingException ejbBusinessMethodMustBePublic(final Method method);
 
     @Message(id = 442, value = "Unexpected Error")
-    EJBException unexpectedError();
+    @Signature(String.class)
+    EJBException unexpectedError(@Cause Throwable cause);
 
     @Message(id = 443, value = "EJB 3.1 FR 13.3.3: BMT bean %s should complete transaction before returning.")
     String transactionNotComplete(String componentName);
@@ -2984,7 +2987,8 @@ public interface EjbLogger extends BasicLogger {
     void failedToRefreshTimers(String timedObjectId);
 
     @Message(id = 457, value = "Unexpected Error")
-    String convertUnexpectedError();
+    @Signature(String.class)
+    EJBTransactionRolledbackException unexpectedErrorRolledBack(@Cause Error error);
 
     //@LogMessage(level = ERROR)
     //@Message(id = 458, value = "Failure in caller transaction.")
@@ -3139,4 +3143,15 @@ public interface EjbLogger extends BasicLogger {
 
     @Message(id = 499, value = "Cannot read derived size - service %s unreachable")
     OperationFailedException cannotReadStrictMaxPoolDerivedSize(ServiceName serviceName);
+
+    @LogMessage(level = ERROR)
+    @Message(id = 500, value = "Legacy org.jboss.security.annotation.SecurityDomain annotation is used in class: %s, please use org.jboss.ejb3.annotation.SecurityDomain instead.")
+    void legacySecurityDomainAnnotationIsUsed(String cls);
+
+    @Message(id = 501, value = "Failed to activate MDB %s")
+    RuntimeException failedToActivateMdb(String componentName, @Cause Exception e);
+
+    @LogMessage(level = ERROR)
+    @Message(id = 502, value = "Exception checking if timer %s should run")
+    void exceptionCheckingIfTimerShouldRun(Timer timer, @Cause Exception e);
 }

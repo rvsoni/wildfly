@@ -1,3 +1,4 @@
+[[Developer_Guide]]
 = Developer Guide
 WildFly developer team;
 :revnumber: {version}
@@ -8,7 +9,7 @@ WildFly developer team;
 :doctype: book
 :icons: font
 :source-highlighter: coderay
-:wildflyVersion: 11
+:wildflyVersion: 12
 
 ifndef::ebook-format[:leveloffset: 1]
 
@@ -18,8 +19,7 @@ ifdef::basebackend-html[toc::[]]
 :numbered:
 
 
-[[target-audience]]
-=== Target Audience
+.Target Audience
 
 Java Developers
 

@@ -31,7 +31,6 @@ import org.jboss.arquillian.container.test.api.ContainerController;
 import org.jboss.arquillian.container.test.api.Deployer;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.junit.InSequence;
@@ -59,7 +58,6 @@ import org.junit.runner.RunWith;
  */
 @Ignore("Uses legacy client hack")
 @RunWith(Arquillian.class)
-@RunAsClient
 public class ClusterPassivationDDTestCase extends ClusterPassivationTestBase {
     private static Logger log = Logger.getLogger(ClusterPassivationDDTestCase.class);
 
@@ -70,13 +68,13 @@ public class ClusterPassivationDDTestCase extends ClusterPassivationTestBase {
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
-    public static Archive<?> deployment0() {
+    public static Archive<?> deployment1() {
         return createDeployment();
     }
 
     @Deployment(name = DEPLOYMENT_2, managed = false, testable = false)
     @TargetsContainer(NODE_2)
-    public static Archive<?> deployment1() {
+    public static Archive<?> deployment2() {
         return createDeployment();
     }
 

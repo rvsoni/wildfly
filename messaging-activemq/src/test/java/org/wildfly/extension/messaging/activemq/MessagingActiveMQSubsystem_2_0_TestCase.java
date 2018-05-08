@@ -27,6 +27,7 @@ import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.WRI
 import static org.jboss.as.model.test.ModelTestControllerVersion.EAP_7_0_0;
 import static org.junit.Assert.assertTrue;
 import static org.wildfly.extension.messaging.activemq.MessagingDependencies.getActiveMQDependencies;
+import static org.wildfly.extension.messaging.activemq.MessagingDependencies.getJGroupsDependencies;
 import static org.wildfly.extension.messaging.activemq.MessagingDependencies.getMessagingActiveMQGAV;
 import static org.wildfly.extension.messaging.activemq.MessagingExtension.BRIDGE_PATH;
 import static org.wildfly.extension.messaging.activemq.MessagingExtension.CLUSTER_CONNECTION_PATH;
@@ -41,11 +42,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
 
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.controller.Operations;
+import org.jboss.as.clustering.jgroups.subsystem.JGroupsSubsystemInitialization;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
-import org.jboss.as.controller.security.CredentialReference;
+import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.model.test.FailedOperationTransformationConfig;
 import org.jboss.as.model.test.ModelTestControllerVersion;
 import org.jboss.as.model.test.ModelTestUtils;
@@ -55,7 +58,7 @@ import org.jboss.as.subsystem.test.KernelServices;
 import org.jboss.as.subsystem.test.KernelServicesBuilder;
 import org.jboss.dmr.ModelNode;
 import org.junit.Test;
-import org.wildfly.clustering.spi.ClusteringRequirement;
+import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.extension.messaging.activemq.ha.HAAttributes;
 import org.wildfly.extension.messaging.activemq.jms.ConnectionFactoryAttributes;
 
@@ -94,10 +97,9 @@ public class MessagingActiveMQSubsystem_2_0_TestCase extends AbstractSubsystemBa
         return properties;
     }
 
-    @Test
     @Override
-    public void testSchemaOfSubsystemTemplates() throws Exception {
-        super.testSchemaOfSubsystemTemplates();
+    protected KernelServices standardSubsystemTest(String configId, boolean compareXml) throws Exception {
+        return super.standardSubsystemTest(configId, false);
     }
 
     /////////////////////////////////////////
@@ -106,7 +108,7 @@ public class MessagingActiveMQSubsystem_2_0_TestCase extends AbstractSubsystemBa
 
     @Test
     public void testHAPolicyConfiguration() throws Exception {
-        standardSubsystemTest("subsystem_2_0_ha-policy.xml");
+        standardSubsystemTest("subsystem_2_0_ha-policy.xml", false);
     }
 
     ///////////////////////
@@ -128,9 +130,12 @@ public class MessagingActiveMQSubsystem_2_0_TestCase extends AbstractSubsystemBa
         KernelServicesBuilder builder = createKernelServicesBuilder(createAdditionalInitialization())
                 .setSubsystemXmlResource("subsystem_2_0_transform.xml");
         builder.createLegacyKernelServicesBuilder(createAdditionalInitialization(), controllerVersion, messagingVersion)
+                .addSingleChildFirstClass(JGroupsSubsystemInitialization.class)
+                .addSingleChildFirstClass(org.jboss.as.clustering.subsystem.AdditionalInitialization.class)
                 .addMavenResourceURL(getMessagingActiveMQGAV(controllerVersion))
                 .addMavenResourceURL(getActiveMQDependencies(controllerVersion))
-                .configureReverseControllerCheck(createAdditionalInitialization(), null)
+                .addMavenResourceURL(getJGroupsDependencies(controllerVersion))
+                .skipReverseControllerCheck()
                 .dontPersistXml();
 
         KernelServices mainServices = builder.build();
@@ -144,8 +149,12 @@ public class MessagingActiveMQSubsystem_2_0_TestCase extends AbstractSubsystemBa
         //Boot up empty controllers with the resources needed for the ops coming from the xml to work
         KernelServicesBuilder builder = createKernelServicesBuilder(createAdditionalInitialization());
         builder.createLegacyKernelServicesBuilder(createAdditionalInitialization(), controllerVersion, messagingVersion)
+                .addSingleChildFirstClass(JGroupsSubsystemInitialization.class)
+                .addSingleChildFirstClass(org.jboss.as.clustering.subsystem.AdditionalInitialization.class)
                 .addMavenResourceURL(getMessagingActiveMQGAV(controllerVersion))
                 .addMavenResourceURL(getActiveMQDependencies(controllerVersion))
+                .addMavenResourceURL(getJGroupsDependencies(controllerVersion))
+                .skipReverseControllerCheck()
                 .dontPersistXml();
 
         KernelServices mainServices = builder.build();
@@ -201,10 +210,19 @@ public class MessagingActiveMQSubsystem_2_0_TestCase extends AbstractSubsystemBa
 
     @Override
     protected AdditionalInitialization createAdditionalInitialization() {
-        return AdditionalInitialization.withCapabilities(ClusteringRequirement.COMMAND_DISPATCHER_FACTORY.resolve("udp"),
-                Capabilities.ELYTRON_DOMAIN_CAPABILITY,
-                Capabilities.ELYTRON_DOMAIN_CAPABILITY + ".elytronDomain",
-                CredentialReference.CREDENTIAL_STORE_CAPABILITY + ".cs1");
+        return new JGroupsSubsystemInitialization()
+                .require(JGroupsRequirement.CHANNEL_FACTORY, "tcp")
+                .require(Capabilities.ELYTRON_DOMAIN_CAPABILITY)
+                .require(Capabilities.ELYTRON_DOMAIN_CAPABILITY + ".elytronDomain")
+                .require(CommonUnaryRequirement.CREDENTIAL_STORE, "cs1")
+                ;
+    }
+
+    @Override
+    protected void compare(ModelNode model1, ModelNode model2) {
+        model1.get(ModelDescriptionConstants.SUBSYSTEM).remove("jgroups");
+        model2.get(ModelDescriptionConstants.SUBSYSTEM).remove("jgroups");
+        super.compare(model1, model2);
     }
 
     private static class ChangeToTrueConfig extends FailedOperationTransformationConfig.AttributesPathAddressConfig<ChangeToTrueConfig> {

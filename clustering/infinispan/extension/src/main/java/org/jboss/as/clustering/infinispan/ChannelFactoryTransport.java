@@ -22,18 +22,12 @@
 
 package org.jboss.as.clustering.infinispan;
 
-import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
 import org.infinispan.commons.CacheException;
-import org.infinispan.configuration.global.GlobalConfiguration;
 import org.infinispan.configuration.global.GlobalConfigurationBuilder;
 import org.infinispan.configuration.global.TransportConfiguration;
-import org.infinispan.factories.annotations.Inject;
-import org.infinispan.remoting.responses.CacheNotFoundResponse;
-import org.infinispan.remoting.transport.jgroups.CommandAwareRpcDispatcher;
 import org.infinispan.remoting.transport.jgroups.JGroupsTransport;
-import org.infinispan.remoting.transport.jgroups.MarshallerAdapter;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
 
 /**
@@ -48,15 +42,14 @@ public class ChannelFactoryTransport extends JGroupsTransport {
         this.factory = factory;
     }
 
-    @Inject
     @Override
-    public void setConfiguration(GlobalConfiguration config) {
+    public void start() {
         GlobalConfigurationBuilder builder = new GlobalConfigurationBuilder();
         // WFLY-6685 Prevent Infinispan from registering channel mbeans
         // The JGroups subsystem already does this
-        builder.globalJmxStatistics().read(config.globalJmxStatistics()).disable();
+        builder.globalJmxStatistics().read(this.configuration.globalJmxStatistics()).disable();
         // ISPN-4755 workaround
-        TransportConfiguration transport = config.transport();
+        TransportConfiguration transport = this.configuration.transport();
         builder.transport()
                 .clusterName(transport.clusterName())
                 .distributedSyncTimeout(transport.distributedSyncTimeout())
@@ -69,25 +62,9 @@ public class ChannelFactoryTransport extends JGroupsTransport {
                 .transport(transport.transport())
                 .withProperties(transport.properties())
                 ;
-        super.setConfiguration(builder.build());
-    }
+        this.configuration = builder.build();
 
-    @Override
-    protected void initRPCDispatcher() {
-        this.dispatcher = new CommandAwareRpcDispatcher(this.channel, this, this.globalHandler, this.getTimeoutExecutor(), this.timeService);
-        MarshallerAdapter adapter = new MarshallerAdapter(this.marshaller) {
-            @Override
-            public Object objectFromBuffer(byte[] buffer, int offset, int length) throws Exception {
-                return ChannelFactoryTransport.this.isUnknownForkResponse(ByteBuffer.wrap(buffer, offset, length)) ? CacheNotFoundResponse.INSTANCE : super.objectFromBuffer(buffer, offset, length);
-            }
-        };
-        this.dispatcher.setRequestMarshaller(adapter);
-        this.dispatcher.setResponseMarshaller(adapter);
-        this.dispatcher.start();
-    }
-
-    boolean isUnknownForkResponse(ByteBuffer response) {
-        return this.factory.isUnknownForkResponse(response);
+        super.start();
     }
 
     @Override

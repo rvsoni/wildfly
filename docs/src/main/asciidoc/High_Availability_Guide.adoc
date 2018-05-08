@@ -1,3 +1,4 @@
+[[High_Availability_Guide]]
 = High Availability Guide
 WildFly clustering team;
 :revnumber: {version}
@@ -8,7 +9,7 @@ WildFly clustering team;
 :doctype: book
 :icons: font
 :source-highlighter: coderay
-:wildflyVersion: 11
+:wildflyVersion: 12
 :leveloffset: +1
 
 ifndef::ebook-format[:leveloffset: 1]
@@ -24,13 +25,7 @@ include::_high-availability/HTTP_Services.adoc[]
 
 include::_high-availability/EJB_Services.adoc[]
 
-include::_high-availability/Hibernate.adoc[]
-
 include::_high-availability/HA_Singleton_Features.adoc[]
-
-include::_high-availability/Related_Topics.adoc[]
-
-include::_high-availability/Changes_From_Previous_Versions.adoc[]
 
 include::_high-availability/Clustering_and_Domain_Setup_Walkthrough.adoc[]
 

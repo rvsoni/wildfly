@@ -1,3 +1,4 @@
+[[Resource_adapters]]
 = Resource adapters
 
 Resource adapters are configured through the _resource-adapters_
@@ -51,7 +52,7 @@ Note, that only JNDI bindings under java:/ or java:jboss/ are supported.
 
 ~(See~ `standalone/configuration/standalone.xml` ~)~
 
-[[using-security-domains]]
+[[ra-using-security-domains]]
 == Using security domains
 
 Information about using security domains can be found at
@@ -66,7 +67,7 @@ configuration by including an META-INF/ironjacamar.xml in the archive.
 The schema can be found at
 http://docs.jboss.org/ironjacamar/schema/ironjacamar_1_0.xsd
 
-[[component-reference]]
+[[ra-component-reference]]
 == Component Reference
 
 The resource adapter subsystem is provided by the

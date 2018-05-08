@@ -109,6 +109,7 @@ public class ServerDefinition extends PersistentResourceDefinition {
             .setDefaultValue(new ModelNode().set(ActiveMQDefaultConfiguration.getDefaultScheduledThreadPoolMaxSize()))
             .setRequired(false)
             .setAllowExpression(true)
+            .setCorrector(InfiniteOrPositiveValidators.NEGATIVE_VALUE_CORRECTOR)
             .setValidator(InfiniteOrPositiveValidators.INT_INSTANCE)
             .setRestartAllServices()
             .build();
@@ -138,6 +139,7 @@ public class ServerDefinition extends PersistentResourceDefinition {
             .setDefaultValue(new ModelNode().set(ActiveMQDefaultConfiguration.getDefaultThreadPoolMaxSize()))
             .setRequired(false)
             .setAllowExpression(true)
+            .setCorrector(InfiniteOrPositiveValidators.NEGATIVE_VALUE_CORRECTOR)
             .setValidator(InfiniteOrPositiveValidators.INT_INSTANCE)
             .setRestartAllServices()
             .build();
@@ -305,6 +307,7 @@ public class ServerDefinition extends PersistentResourceDefinition {
             .setDefaultValue(new ModelNode(ActiveMQDefaultConfiguration.getDefaultJournalPoolFiles()))
             .setRequired(false)
             .setAllowExpression(true)
+            .setCorrector(InfiniteOrPositiveValidators.NEGATIVE_VALUE_CORRECTOR)
             .setValidator(InfiniteOrPositiveValidators.INT_INSTANCE)
             .setRestartAllServices()
             .build();
@@ -411,6 +414,7 @@ public class ServerDefinition extends PersistentResourceDefinition {
             .setDefaultValue(new ModelNode(ActiveMQDefaultConfiguration.getDefaultJournalPerfBlastPages()))
             .setRequired(false)
             .setAllowExpression(true)
+            .setCorrector(InfiniteOrPositiveValidators.NEGATIVE_VALUE_CORRECTOR)
             .setValidator(InfiniteOrPositiveValidators.INT_INSTANCE)
             .setRestartAllServices()
             .build();
@@ -627,7 +631,6 @@ public class ServerDefinition extends PersistentResourceDefinition {
                 // Acceptors
                 HTTPAcceptorDefinition.INSTANCE,
 
-                DiscoveryGroupDefinition.INSTANCE,
                 DivertDefinition.INSTANCE,
                 ConnectorServiceDefinition.INSTANCE,
                 GroupingHandlerDefinition.INSTANCE,
@@ -649,6 +652,7 @@ public class ServerDefinition extends PersistentResourceDefinition {
 
         children.add(new BridgeDefinition(registerRuntimeOnly));
         children.add(new BroadcastGroupDefinition(registerRuntimeOnly));
+        children.add(new DiscoveryGroupDefinition(registerRuntimeOnly));
         children.add(new ClusterConnectionDefinition(registerRuntimeOnly));
         children.add(new QueueDefinition(registerRuntimeOnly, MessagingExtension.QUEUE_PATH));
         children.add(new JMSQueueDefinition(false, registerRuntimeOnly));

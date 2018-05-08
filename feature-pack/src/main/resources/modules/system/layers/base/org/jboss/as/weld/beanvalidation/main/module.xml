@@ -22,7 +22,7 @@
   ~ 02110-1301 USA, or see the FSF site: http://www.fsf.org.
   -->
 
-<module xmlns="urn:jboss:module:1.5" name="org.jboss.as.weld.beanvalidation">
+<module xmlns="urn:jboss:module:1.8" name="org.jboss.as.weld.beanvalidation">
 
     <properties>
         <property name="jboss.api" value="private"/>
@@ -46,6 +46,7 @@
         <module name="org.wildfly.extension.bean-validation"/>
         <module name="org.hibernate.validator.cdi" />
         <module name="javax.enterprise.api"/>
+        <module name="org.wildfly.cdi-api-bridge"/>
         <module name="javax.validation.api"/>
     </dependencies>
 

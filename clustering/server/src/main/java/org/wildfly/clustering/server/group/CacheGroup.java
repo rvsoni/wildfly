@@ -44,16 +44,18 @@ import org.infinispan.notifications.cachemanagerlistener.annotation.Merged;
 import org.infinispan.notifications.cachemanagerlistener.annotation.ViewChanged;
 import org.infinispan.notifications.cachemanagerlistener.event.ViewChangedEvent;
 import org.infinispan.remoting.transport.Address;
+import org.infinispan.remoting.transport.LocalModeAddress;
 import org.infinispan.remoting.transport.Transport;
 import org.infinispan.remoting.transport.jgroups.JGroupsAddress;
+import org.infinispan.remoting.transport.jgroups.JGroupsAddressCache;
 import org.jboss.threads.JBossThreadFactory;
 import org.wildfly.clustering.Registration;
-import org.wildfly.clustering.spi.NodeFactory;
 import org.wildfly.clustering.group.GroupListener;
 import org.wildfly.clustering.group.Membership;
 import org.wildfly.clustering.group.Node;
 import org.wildfly.clustering.server.logging.ClusteringServerLogger;
 import org.wildfly.clustering.service.concurrent.ClassLoaderThreadFactory;
+import org.wildfly.clustering.spi.NodeFactory;
 import org.wildfly.security.manager.WildFlySecurityManager;
 
 /**
@@ -85,10 +87,10 @@ public class CacheGroup implements Group<Address>, AutoCloseable {
         this.cache.removeListener(this);
         this.cache.getCacheManager().removeListener(this);
         // Cleanup any unregistered listeners
-        this.listeners.values().forEach(executor -> {
+        for (ExecutorService executor : this.listeners.values()) {
             PrivilegedAction<List<Runnable>> action = () -> executor.shutdownNow();
             WildFlySecurityManager.doUnchecked(action);
-        });
+        }
         this.listeners.clear();
     }
 
@@ -111,7 +113,7 @@ public class CacheGroup implements Group<Address>, AutoCloseable {
         }
         Transport transport = this.cache.getCacheManager().getTransport();
         DistributionManager dist = this.cache.getAdvancedCache().getDistributionManager();
-        return (dist != null) ? new CacheMembership(transport.getAddress(), dist.getConsistentHash(), this) : new CacheMembership(transport, this);
+        return (dist != null) ? new CacheMembership(transport.getAddress(), dist.getCacheTopology(), this) : new CacheMembership(transport, this);
     }
 
     @Override
@@ -124,8 +126,13 @@ public class CacheGroup implements Group<Address>, AutoCloseable {
         return this.nodeFactory.createNode(toJGroupsAddress(address));
     }
 
+    @Override
+    public Address getAddress(Node node) {
+        return (node instanceof AddressableNode) ? JGroupsAddressCache.fromJGroupsAddress(((AddressableNode) node).getAddress()) : LocalModeAddress.INSTANCE;
+    }
+
     private static org.jgroups.Address toJGroupsAddress(Address address) {
-        if (address == null) return null;
+        if ((address == null) || (address == LocalModeAddress.INSTANCE)) return null;
         if (address instanceof JGroupsAddress) {
             JGroupsAddress jgroupsAddress = (JGroupsAddress) address;
             return jgroupsAddress.getJGroupsAddress();
@@ -167,8 +174,8 @@ public class CacheGroup implements Group<Address>, AutoCloseable {
         int viewId = event.getCache().getCacheManager().getTransport().getViewId();
         if (!this.listeners.isEmpty()) {
             Address localAddress = event.getCache().getCacheManager().getAddress();
-            Membership previousMembership = new CacheMembership(localAddress, event.getConsistentHashAtStart(), this);
-            Membership membership = new CacheMembership(localAddress, event.getConsistentHashAtEnd(), this);
+            Membership previousMembership = new CacheMembership(localAddress, event.getWriteConsistentHashAtStart(), this);
+            Membership membership = new CacheMembership(localAddress, event.getWriteConsistentHashAtEnd(), this);
             Boolean status = this.views.get(viewId);
             boolean merged = (status != null) ? status.booleanValue() : false;
             for (Map.Entry<GroupListener, ExecutorService> entry : this.listeners.entrySet()) {

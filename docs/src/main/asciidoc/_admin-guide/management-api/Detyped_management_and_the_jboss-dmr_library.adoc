@@ -1,3 +1,4 @@
+[[Detyped_management_and_the_jboss-dmr_library]]
 = Detyped management and the jboss-dmr library
 
 The management model exposed by WildFly is very large and complex. There
@@ -350,7 +351,7 @@ bsh % print(node.toString());
 [5]
 ----
 
-[[properties]]
+[[dmr-properties]]
 === Properties
 
 The third public class in the jboss-dmr library is

@@ -159,6 +159,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -190,6 +191,8 @@ import org.jboss.security.authentication.JBossCachedAuthenticationManager;
  * @author Stuart Douglas
  */
 public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
+
+    private static final boolean JAVA_EE_8 = Boolean.getBoolean("ee8.preview.mode");
 
     public static final ServiceName SERVICE_NAME = ServiceName.of("UndertowDeploymentInfoService");
 
@@ -275,12 +278,22 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
 
             deploymentInfo.setConfidentialPortManager(getConfidentialPortManager());
 
+            if(!JAVA_EE_8) {
+                //in EE7 mode we need to act as a Servlet 3.1 container
+                deploymentInfo.setContainerMinorVersion(1);
+                deploymentInfo.setContainerMajorVersion(3);
+            }
+
             handleDistributable(deploymentInfo);
             if (securityFunction.getOptionalValue() == null) {
-                handleIdentityManager(deploymentInfo);
-                handleJASPIMechanism(deploymentInfo);
-                handleJACCAuthorization(deploymentInfo);
-                handleAuthManagerLogout(deploymentInfo, mergedMetaData);
+                if (securityDomain != null) {
+                    handleIdentityManager(deploymentInfo);
+                    handleJASPIMechanism(deploymentInfo);
+                    handleJACCAuthorization(deploymentInfo);
+                    handleAuthManagerLogout(deploymentInfo, mergedMetaData);
+                } else {
+                    deploymentInfo.setSecurityDisabled(true);
+                }
 
                 if(mergedMetaData.isUseJBossAuthorization()) {
                     deploymentInfo.setAuthorizationManager(new JbossAuthorizationManager(deploymentInfo.getAuthorizationManager()));
@@ -422,9 +435,6 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
     }
 
     private void handleAuthManagerLogout(DeploymentInfo deploymentInfo, JBossWebMetaData mergedMetaData) {
-        if(securityDomain == null) {
-            return;
-        }
         AuthenticationManager manager = securityDomainContextValue.getValue().getAuthenticationManager();
         deploymentInfo.addNotificationReceiver(new LogoutNotificationReceiver(manager, securityDomain));
         if(mergedMetaData.isFlushOnSessionInvalidation()) {
@@ -461,9 +471,6 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
      * @param deploymentInfo
      */
     private void handleJASPIMechanism(final DeploymentInfo deploymentInfo) {
-        if(securityDomain == null) {
-            return;
-        }
         ApplicationPolicy applicationPolicy = SecurityConfiguration.getApplicationPolicy(this.securityDomain);
 
         if (applicationPolicy != null && JASPIAuthenticationInfo.class.isInstance(applicationPolicy.getAuthenticationInfo())) {
@@ -487,9 +494,6 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
      * @param deploymentInfo the {@link DeploymentInfo} instance.
      */
     private void handleJACCAuthorization(final DeploymentInfo deploymentInfo) {
-        if(securityDomain == null) {
-            return;
-        }
         // TODO make the authorization manager implementation configurable in Undertow or jboss-web.xml
         ApplicationPolicy applicationPolicy = SecurityConfiguration.getApplicationPolicy(this.securityDomain);
         if (applicationPolicy != null) {
@@ -512,13 +516,11 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
     }
 
     private void handleIdentityManager(final DeploymentInfo deploymentInfo) {
-        if(securityDomain != null) {
-            SecurityDomainContext sdc = securityDomainContextValue.getValue();
-            deploymentInfo.setIdentityManager(new JAASIdentityManagerImpl(sdc));
-            AuditManager auditManager = sdc.getAuditManager();
-            if (auditManager != null && !mergedMetaData.isDisableAudit()) {
-                deploymentInfo.addNotificationReceiver(new AuditNotificationReceiver(auditManager));
-            }
+        SecurityDomainContext sdc = securityDomainContextValue.getValue();
+        deploymentInfo.setIdentityManager(new JAASIdentityManagerImpl(sdc));
+        AuditManager auditManager = sdc.getAuditManager();
+        if (auditManager != null && !mergedMetaData.isDisableAudit()) {
+            deploymentInfo.addNotificationReceiver(new AuditNotificationReceiver(auditManager));
         }
     }
 
@@ -608,6 +610,8 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
                 d.setMajorVersion(3);
                 d.setMinorVersion(1);
             }
+
+            d.setDefaultCookieVersion(servletContainer.getDefaultCookieVersion());
 
             //in most cases flush just hurts performance for no good reason
             d.setIgnoreFlush(servletContainer.isIgnoreFlush());
@@ -871,8 +875,12 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
             }
 
             if (mergedMetaData.getListeners() != null) {
+                Set<String> tldListeners = new HashSet<>();
+                for(Map.Entry<String, TagLibraryInfo> e : tldInfo.entrySet()) {
+                    tldListeners.addAll(Arrays.asList(e.getValue().getListeners()));
+                }
                 for (ListenerMetaData listener : mergedMetaData.getListeners()) {
-                    addListener(module.getClassLoader(), componentRegistry, d, listener);
+                    addListener(module.getClassLoader(), componentRegistry, d, listener, tldListeners.contains(listener.getListenerClass()));
                 }
 
             }
@@ -1076,12 +1084,7 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
                 d.addOuterHandlerChainWrapper(new HandlerWrapper() {
                     @Override
                     public HttpHandler wrap(HttpHandler handler) {
-                        if (predicatedHandlers.size() == 1) {
-                            PredicatedHandler ph = predicatedHandlers.get(0);
-                            return Handlers.predicate(ph.getPredicate(), ph.getHandler().wrap(handler), handler);
-                        } else {
-                            return Handlers.predicates(predicatedHandlers, handler);
-                        }
+                        return Handlers.predicates(predicatedHandlers, handler);
                     }
                 });
                 d.addOuterHandlerChainWrapper(new RewriteCorrectingHandlerWrappers.PreWrapper());
@@ -1203,16 +1206,16 @@ public class UndertowDeploymentInfoService implements Service<DeploymentInfo> {
         return ret;
     }
 
-    private static void addListener(final ClassLoader classLoader, final ComponentRegistry components, final DeploymentInfo d, final ListenerMetaData listener) throws ClassNotFoundException {
+    private static void addListener(final ClassLoader classLoader, final ComponentRegistry components, final DeploymentInfo d, final ListenerMetaData listener, boolean programatic) throws ClassNotFoundException {
 
         ListenerInfo l;
         final Class<? extends EventListener> listenerClass = (Class<? extends EventListener>) classLoader.loadClass(listener.getListenerClass());
         ManagedReferenceFactory creator = components.createInstanceFactory(listenerClass);
         if (creator != null) {
             InstanceFactory<EventListener> factory = createInstanceFactory(creator);
-            l = new ListenerInfo(listenerClass, factory);
+            l = new ListenerInfo(listenerClass, factory, programatic);
         } else {
-            l = new ListenerInfo(listenerClass);
+            l = new ListenerInfo(listenerClass, programatic);
         }
         d.addListener(l);
     }

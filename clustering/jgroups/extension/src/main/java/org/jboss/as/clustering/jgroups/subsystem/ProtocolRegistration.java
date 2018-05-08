@@ -22,21 +22,27 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.net.InetSocketAddress;
+import java.security.KeyStore;
+import java.util.EnumSet;
+import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import org.jboss.as.clustering.controller.Registration;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
 import org.jboss.as.clustering.controller.RuntimeResourceRegistration;
-import org.jboss.as.clustering.function.Consumers;
 import org.jboss.as.controller.ModelVersion;
+import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
+import org.jgroups.PhysicalAddress;
+import org.jgroups.conf.ProtocolConfiguration;
+import org.jgroups.protocols.MERGE3;
+import org.jgroups.protocols.UNICAST3;
+import org.jgroups.protocols.pbcast.NAKACK2;
+import org.jgroups.stack.IpAddress;
+import org.jgroups.stack.Protocol;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
 
 /**
@@ -45,122 +51,168 @@ import org.wildfly.clustering.jgroups.spi.ChannelFactory;
  */
 public class ProtocolRegistration implements Registration<ManagementResourceRegistration> {
 
-    // Enumerates protocols with custom builders or definitions
-    enum ProtocolType implements Iterable<String> {
-        AUTH("AUTH"),
-        ENCRYPT("ASYM_ENCRYPT", "SYM_ENCRYPT"),
-        JDBC("JDBC_PING"),
-        MULTICAST("pbcast.NAKACK2"),
-        MULTICAST_SOCKET("MPING"),
-        SOCKET_DISCOVERY("TCPGOSSIP", "TCPPING"),
+    enum AuthProtocol {
+        AUTH;
+    }
+
+    enum EncryptProtocol {
+        ASYM_ENCRYPT(KeyStore.PrivateKeyEntry.class),
+        SYM_ENCRYPT(KeyStore.SecretKeyEntry.class),
         ;
-        private final Set<String> protocols;
+        final Class<? extends KeyStore.Entry> entryClass;
 
-        ProtocolType(String protocol) {
-            this.protocols = Collections.singleton(protocol);
+        EncryptProtocol(Class<? extends KeyStore.Entry> entryClass) {
+            this.entryClass = entryClass;
+        }
+    }
+
+    enum InitialHostsProtocol {
+        TCPGOSSIP(InetSocketAddress.class, Function.identity()),
+        TCPPING(PhysicalAddress.class, address -> new IpAddress(address.getAddress(), address.getPort())),
+        ;
+        final Function<InetSocketAddress, ?> hostTransformer;
+
+        <A> InitialHostsProtocol(Class<A> hostClass, Function<InetSocketAddress, A> hostTransformer) {
+            this.hostTransformer = hostTransformer;
+        }
+    }
+
+    enum JdbcProtocol {
+        JDBC_PING;
+    }
+
+    enum MulticastProtocol {
+        MPING;
+    }
+
+    enum LegacyProtocol {
+        MERGE2(MERGE3.class, JGroupsModel.VERSION_6_0_0),
+        NAKACK("pbcast.NAKACK", NAKACK2.class, JGroupsModel.VERSION_6_0_0),
+        UNICAST2(UNICAST3.class, JGroupsModel.VERSION_6_0_0),
+        ;
+        final String name;
+        final String targetName;
+        final JGroupsModel deprecation;
+
+        LegacyProtocol(Class<? extends Protocol> targetProtocol, JGroupsModel deprecation) {
+            this(null, targetProtocol, deprecation);
         }
 
-        ProtocolType(String... protocols) {
-            this.protocols = Collections.unmodifiableSet(Stream.of(protocols).collect(Collectors.toSet()));
-        }
-
-        @Override
-        public Iterator<String> iterator() {
-            return this.protocols.iterator();
-        }
-
-        Stream<String> stream() {
-            return this.protocols.stream();
-        }
-
-        boolean contains(String protocol) {
-            return this.protocols.contains(protocol);
+        LegacyProtocol(String name, Class<? extends Protocol> targetProtocol, JGroupsModel deprecation) {
+            this.name = (name != null) ? name : this.name();
+            this.targetName = targetProtocol.getName().substring(ProtocolConfiguration.protocol_prefix.length() + 1);
+            this.deprecation = deprecation;
         }
     }
 
     static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
+        ProtocolResourceDefinition.addTransformations(version, parent.addChildResource(ProtocolResourceDefinition.WILDCARD_PATH));
 
-        ProtocolResourceDefinition.buildTransformation(version, parent);
+        for (MulticastProtocol protocol : EnumSet.allOf(MulticastProtocol.class)) {
+            PathElement path = ProtocolResourceDefinition.pathElement(protocol.name());
+            if (!JGroupsModel.VERSION_5_0_0.requiresTransformation(version)) {
+                SocketBindingProtocolResourceDefinition.addTransformations(version, parent.addChildResource(path));
+            }
+        }
 
-        ProtocolType.MULTICAST_SOCKET.stream().map(ProtocolResourceDefinition::pathElement).forEach(path -> {
-            SocketBindingProtocolResourceDefinition.addTransformations(version, parent.addChildResource(path));
-        });
-
-        ProtocolType.JDBC.stream().map(ProtocolResourceDefinition::pathElement).forEach(path -> {
+        for (JdbcProtocol protocol : EnumSet.allOf(JdbcProtocol.class)) {
+            PathElement path = ProtocolResourceDefinition.pathElement(protocol.name());
             if (JGroupsModel.VERSION_5_0_0.requiresTransformation(version)) {
                 parent.rejectChildResource(path);
             } else {
                 JDBCProtocolResourceDefinition.addTransformations(version, parent.addChildResource(path));
             }
-        });
+        }
 
-        ProtocolType.ENCRYPT.stream().map(ProtocolResourceDefinition::pathElement).forEach(path -> {
+        for (EncryptProtocol protocol : EnumSet.allOf(EncryptProtocol.class)) {
+            PathElement path = ProtocolResourceDefinition.pathElement(protocol.name());
             if (JGroupsModel.VERSION_5_0_0.requiresTransformation(version)) {
                 parent.rejectChildResource(path);
             } else {
                 EncryptProtocolResourceDefinition.addTransformations(version, parent.addChildResource(path));
             }
-        });
+        }
 
-        ProtocolType.SOCKET_DISCOVERY.stream().map(ProtocolResourceDefinition::pathElement).forEach(path -> {
+        for (InitialHostsProtocol protocol : EnumSet.allOf(InitialHostsProtocol.class)) {
+            PathElement path = ProtocolResourceDefinition.pathElement(protocol.name());
             if (JGroupsModel.VERSION_5_0_0.requiresTransformation(version)) {
                 parent.rejectChildResource(path);
             } else {
                 SocketDiscoveryProtocolResourceDefinition.addTransformations(version, parent.addChildResource(path));
             }
-        });
+        }
 
-        ProtocolType.AUTH.stream().map(ProtocolResourceDefinition::pathElement).forEach(path -> {
+        for (AuthProtocol protocol : EnumSet.allOf(AuthProtocol.class)) {
+            PathElement path = ProtocolResourceDefinition.pathElement(protocol.name());
             if (JGroupsModel.VERSION_5_0_0.requiresTransformation(version)) {
                 parent.rejectChildResource(path);
             } else {
                 AuthProtocolResourceDefinition.addTransformations(version, parent.addChildResource(path));
             }
-        });
+        }
+    }
+
+    private static class ResourceDescriptorConfigurator implements UnaryOperator<ResourceDescriptor> {
+        private final RuntimeResourceRegistration runtimeResourceRegistration;
+
+        ResourceDescriptorConfigurator(RuntimeResourceRegistration runtimeResourceRegistration) {
+            this.runtimeResourceRegistration = runtimeResourceRegistration;
+        }
+
+        @Override
+        public ResourceDescriptor apply(ResourceDescriptor descriptor) {
+            return descriptor.addRuntimeResourceRegistration(this.runtimeResourceRegistration);
+        }
     }
 
     private final ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory;
-    private final Consumer<ResourceDescriptor> descriptorConfigurator;
+    private final UnaryOperator<ResourceDescriptor> configurator;
 
     ProtocolRegistration(ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory) {
         this.parentBuilderFactory = parentBuilderFactory;
-        this.descriptorConfigurator = Consumers.empty();
+        this.configurator = UnaryOperator.identity();
     }
 
     ProtocolRegistration(ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory, RuntimeResourceRegistration runtimeResourceRegistration) {
         this.parentBuilderFactory = parentBuilderFactory;
-        this.descriptorConfigurator = descriptor -> descriptor.addRuntimeResourceRegistration(runtimeResourceRegistration);
+        this.configurator = new ResourceDescriptorConfigurator(runtimeResourceRegistration);
     }
 
     @Override
     public void register(ManagementResourceRegistration registration) {
-        new GenericProtocolResourceDefinition<>(this.descriptorConfigurator, address -> ProtocolType.MULTICAST.contains(address.getLastElement().getValue()) ? new MulticastProtocolConfigurationBuilder<>(address) : new ProtocolConfigurationBuilder<>(address), this.parentBuilderFactory).register(registration);
+        new GenericProtocolResourceDefinition<>(this.configurator, this.parentBuilderFactory).register(registration);
 
         // Override definitions for protocol types
-        ProtocolType.MULTICAST_SOCKET.forEach(protocol -> new SocketBindingProtocolResourceDefinition<>(protocol, this.descriptorConfigurator, address -> new MulticastSocketProtocolConfigurationBuilder<>(address), this.parentBuilderFactory).register(registration));
+        for (MulticastProtocol protocol : EnumSet.allOf(MulticastProtocol.class)) {
+            new SocketBindingProtocolResourceDefinition<>(protocol.name(), this.configurator, MulticastSocketProtocolConfigurationBuilder::new, this.parentBuilderFactory).register(registration);
+        }
 
-        ProtocolType.JDBC.forEach(protocol -> {
-            new JDBCProtocolResourceDefinition<>(protocol, this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
+        for (JdbcProtocol protocol : EnumSet.allOf(JdbcProtocol.class)) {
+            new JDBCProtocolResourceDefinition(protocol.name(), this.configurator, this.parentBuilderFactory).register(registration);
             // Add deprecated override definition for legacy variant
-            new GenericProtocolResourceDefinition<>(protocol, JGroupsModel.VERSION_5_0_0, address -> new ProtocolConfigurationBuilder<>(address), this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
-        });
+            new GenericProtocolResourceDefinition<>(protocol.name(), JGroupsModel.VERSION_5_0_0, this.configurator, this.parentBuilderFactory).register(registration);
+        }
 
-        ProtocolType.ENCRYPT.forEach(protocol -> {
-            new EncryptProtocolResourceDefinition<>(protocol, this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
+        for (EncryptProtocol protocol : EnumSet.allOf(EncryptProtocol.class)) {
+            new EncryptProtocolResourceDefinition<>(protocol.name(), protocol.entryClass, this.configurator, this.parentBuilderFactory).register(registration);
             // Add deprecated override definition for legacy variant
-            new GenericProtocolResourceDefinition<>(protocol, JGroupsModel.VERSION_5_0_0, address -> new ProtocolConfigurationBuilder<>(address), this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
-        });
+            new GenericProtocolResourceDefinition<>(protocol.name(), JGroupsModel.VERSION_5_0_0, this.configurator, this.parentBuilderFactory).register(registration);
+        }
 
-        ProtocolType.SOCKET_DISCOVERY.forEach(protocol -> {
-            new SocketDiscoveryProtocolResourceDefinition<>(protocol, this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
+        for (InitialHostsProtocol protocol : EnumSet.allOf(InitialHostsProtocol.class)) {
+            new SocketDiscoveryProtocolResourceDefinition<>(protocol.name(), protocol.hostTransformer, this.configurator, this.parentBuilderFactory).register(registration);
             // Add deprecated override definition for legacy variant
-            new GenericProtocolResourceDefinition<>(protocol, JGroupsModel.VERSION_5_0_0, address -> new ProtocolConfigurationBuilder<>(address), this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
-        });
+            new GenericProtocolResourceDefinition<>(protocol.name(), JGroupsModel.VERSION_5_0_0, this.configurator, this.parentBuilderFactory).register(registration);
+        }
 
-        ProtocolType.AUTH.forEach(protocol -> {
-            new AuthProtocolResourceDefinition(protocol, this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
+        for (AuthProtocol protocol : EnumSet.allOf(AuthProtocol.class)) {
+            new AuthProtocolResourceDefinition(protocol.name(), this.configurator, this.parentBuilderFactory).register(registration);
             // Add deprecated override definition for legacy variant
-            new GenericProtocolResourceDefinition<>(protocol, JGroupsModel.VERSION_5_0_0, address -> new ProtocolConfigurationBuilder<>(address), this.descriptorConfigurator, this.parentBuilderFactory).register(registration);
-        });
+            new GenericProtocolResourceDefinition<>(protocol.name(), JGroupsModel.VERSION_5_0_0, this.configurator, this.parentBuilderFactory).register(registration);
+        }
+
+        for (LegacyProtocol protocol : EnumSet.allOf(LegacyProtocol.class)) {
+            new LegacyProtocolResourceDefinition<>(protocol.name, protocol.targetName, protocol.deprecation, this.configurator, this.parentBuilderFactory).register(registration);
+        }
     }
 }

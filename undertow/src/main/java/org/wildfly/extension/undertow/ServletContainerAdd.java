@@ -22,6 +22,7 @@
 
 package org.wildfly.extension.undertow;
 
+import io.undertow.connector.ByteBufferPool;
 import io.undertow.security.api.AuthenticationMechanismFactory;
 import io.undertow.server.handlers.cache.DirectBufferCache;
 import io.undertow.servlet.api.CrawlerSessionManagerConfig;
@@ -37,10 +38,8 @@ import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.Property;
 import org.jboss.msc.service.ServiceController;
-import org.jboss.msc.value.InjectedValue;
 import org.jboss.security.negotiation.NegotiationMechanismFactory;
 import org.wildfly.extension.undertow.security.digest.DigestAuthenticationMechanismFactory;
-import org.xnio.Pool;
 import org.xnio.XnioWorker;
 
 import java.util.ArrayList;
@@ -91,6 +90,7 @@ final class ServletContainerAdd extends AbstractBoottimeAddStepHandler {
         final int fileCacheMaxFileSize = ServletContainerDefinition.FILE_CACHE_MAX_FILE_SIZE.resolveModelAttribute(context, model).asInt();
         final ModelNode fileCacheTtlNode = ServletContainerDefinition.FILE_CACHE_TIME_TO_LIVE.resolveModelAttribute(context, model);
         final Integer fileCacheTimeToLive = fileCacheTtlNode.isDefined()  ? fileCacheTtlNode.asInt() : null;
+        final int defaultCookieVersion = ServletContainerDefinition.DEFAULT_COOKIE_VERSION.resolveModelAttribute(context, model).asInt();
 
         Boolean directoryListingEnabled = null;
         if(model.hasDefined(Constants.DIRECTORY_LISTING)) {
@@ -137,7 +137,7 @@ final class ServletContainerAdd extends AbstractBoottimeAddStepHandler {
                 disableCachingForSecuredPages, webSocketInfo != null, webSocketInfo != null && webSocketInfo.isDispatchToWorker(),
                 webSocketInfo != null && webSocketInfo.isPerMessageDeflate(), webSocketInfo == null ? -1 : webSocketInfo.getDeflaterLevel(),
                 mimeMappings,
-                welcomeFiles, directoryListingEnabled, proactiveAuth, sessionIdLength, authenticationMechanisms, maxSessions, crawlerSessionManagerConfig, disableFileWatchService, disableSessionIdReususe, fileCacheMetadataSize, fileCacheMaxFileSize, fileCacheTimeToLive);
+                welcomeFiles, directoryListingEnabled, proactiveAuth, sessionIdLength, authenticationMechanisms, maxSessions, crawlerSessionManagerConfig, disableFileWatchService, disableSessionIdReususe, fileCacheMetadataSize, fileCacheMaxFileSize, fileCacheTimeToLive, defaultCookieVersion);
 
 
         final CapabilityServiceBuilder<ServletContainerService> builder = context.getCapabilityServiceTarget()
@@ -150,7 +150,7 @@ final class ServletContainerAdd extends AbstractBoottimeAddStepHandler {
         }
         if(webSocketInfo != null) {
             builder.addCapabilityRequirement(Capabilities.REF_IO_WORKER, XnioWorker.class, container.getWebsocketsWorker(), webSocketInfo.getWorker());
-            builder.addCapabilityRequirement(Capabilities.REF_BUFFER_POOL, Pool.class, (InjectedValue) container.getWebsocketsBufferPool(), webSocketInfo.getBufferPool());
+            builder.addCapabilityRequirement(Capabilities.CAPABILITY_BYTE_BUFFER_POOL, ByteBufferPool.class, container.getWebsocketsBufferPool(), webSocketInfo.getBufferPool());
         }
 
         builder.setInitialMode(ServiceController.Mode.ON_DEMAND)

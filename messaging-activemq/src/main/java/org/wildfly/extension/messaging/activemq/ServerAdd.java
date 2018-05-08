@@ -32,7 +32,7 @@ import static org.wildfly.extension.messaging.activemq.CommonAttributes.BROADCAS
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.DISCOVERY_GROUP;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.HTTP_ACCEPTOR;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.INCOMING_INTERCEPTORS;
-import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_CHANNEL;
+import static org.wildfly.extension.messaging.activemq.CommonAttributes.JGROUPS_CLUSTER;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.JOURNAL_DIRECTORY;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.LARGE_MESSAGES_DIRECTORY;
 import static org.wildfly.extension.messaging.activemq.CommonAttributes.MODULE;
@@ -138,6 +138,7 @@ import org.jboss.as.controller.services.path.PathManagerService;
 import org.jboss.as.network.OutboundSocketBinding;
 import org.jboss.as.network.SocketBinding;
 import org.jboss.as.security.plugins.SecurityDomainContext;
+import org.jboss.as.security.service.SecurityBootstrapService;
 import org.jboss.as.security.service.SecurityDomainService;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.Property;
@@ -298,7 +299,10 @@ class ServerAdd extends AbstractAddStepHandler {
                     serviceBuilder.addDependency(DependencyType.REQUIRED,
                             SecurityDomainService.SERVICE_NAME.append(domain),
                             SecurityDomainContext.class,
-                            serverService.getSecurityDomainContextInjector());
+                            serverService.getSecurityDomainContextInjector())
+                    // WFLY-6652 / WFLY-10292 this dependency ensures that Artemis will be able to destroy any queues created on behalf of a
+                    // pooled-connection-factory client during server stop
+                    .addDependency(SecurityBootstrapService.SERVICE_NAME);
                 }
 
                 // inject credential-references for bridges
@@ -324,18 +328,17 @@ class ServerAdd extends AbstractAddStepHandler {
                     serviceBuilder.addDependency(socketName, SocketBinding.class, serverService.getSocketBindingInjector(socketBinding));
                 }
 
-                final Set<String> outboundSocketBindings = new HashSet<String>();
-                TransportConfigOperationHandlers.processConnectors(context, configuration, model, outboundSocketBindings);
-                for (final String outboundSocketBinding : outboundSocketBindings) {
-                    final ServiceName outboundSocketName = OutboundSocketBinding.OUTBOUND_SOCKET_BINDING_BASE_SERVICE_NAME.append(outboundSocketBinding);
-                    // Optional dependency so it won't fail if the user used a ref to socket-binding instead of
-                    // outgoing-socket-binding
-                    serviceBuilder.addDependency(DependencyType.OPTIONAL, outboundSocketName, OutboundSocketBinding.class, serverService.getOutboundSocketBindingInjector(outboundSocketBinding));
-                    if (!socketBindings.contains(outboundSocketBinding)) {
-                        // Add a dependency on the regular socket binding as well so users don't have to use
-                        // outgoing-socket-binding to configure a ref to the local server socket
-                        final ServiceName socketName = SocketBinding.JBOSS_BINDING_NAME.append(outboundSocketBinding);
-                        serviceBuilder.addDependency(DependencyType.OPTIONAL, socketName, SocketBinding.class, serverService.getSocketBindingInjector(outboundSocketBinding));
+                final Set<String> connectorsSocketBindings = new HashSet<String>();
+                TransportConfigOperationHandlers.processConnectors(context, configuration, model, connectorsSocketBindings);
+                for (final String connectorSocketBinding : connectorsSocketBindings) {
+                    // find whether the connectorSocketBinding references a SocketBinding or an OutboundSocketBinding
+                    boolean outbound = isOutBoundSocketBinding(context, connectorSocketBinding);
+                    if (outbound) {
+                        final ServiceName outboundSocketName = OutboundSocketBinding.OUTBOUND_SOCKET_BINDING_BASE_SERVICE_NAME.append(connectorSocketBinding);
+                        serviceBuilder.addDependency(outboundSocketName, OutboundSocketBinding.class, serverService.getOutboundSocketBindingInjector(connectorSocketBinding));
+                    } else {
+                        final ServiceName socketName = SocketBinding.JBOSS_BINDING_NAME.append(connectorSocketBinding);
+                        serviceBuilder.addDependency(socketName, SocketBinding.class, serverService.getSocketBindingInjector(connectorSocketBinding));
                     }
                 }
                 //this requires connectors
@@ -350,10 +353,10 @@ class ServerAdd extends AbstractAddStepHandler {
                         final String key = "broadcast" + name;
                         ModelNode broadcastGroupModel = model.get(BROADCAST_GROUP, name);
 
-                        if (broadcastGroupModel.hasDefined(JGROUPS_CHANNEL.getName())) {
-                            ModelNode channel = BroadcastGroupDefinition.JGROUPS_STACK.resolveModelAttribute(context, broadcastGroupModel);
+                        if (broadcastGroupModel.hasDefined(JGROUPS_CLUSTER.getName())) {
+                            ModelNode channel = BroadcastGroupDefinition.JGROUPS_CHANNEL.resolveModelAttribute(context, broadcastGroupModel);
                             ServiceName commandDispatcherFactoryServiceName = channel.isDefined() ? ClusteringRequirement.COMMAND_DISPATCHER_FACTORY.getServiceName(context, channel.asString()) : ClusteringDefaultRequirement.COMMAND_DISPATCHER_FACTORY.getServiceName(context);
-                            String clusterName = JGROUPS_CHANNEL.resolveModelAttribute(context, broadcastGroupModel).asString();
+                            String clusterName = JGROUPS_CLUSTER.resolveModelAttribute(context, broadcastGroupModel).asString();
                             serviceBuilder.addDependency(commandDispatcherFactoryServiceName, CommandDispatcherFactory.class, serverService.getCommandDispatcherFactoryInjector(key));
                             serverService.getClusterNames().put(key, clusterName);
                         } else {
@@ -367,10 +370,10 @@ class ServerAdd extends AbstractAddStepHandler {
                         final String name = config.getName();
                         final String key = "discovery" + name;
                         ModelNode discoveryGroupModel = model.get(DISCOVERY_GROUP, name);
-                        if (discoveryGroupModel.hasDefined(JGROUPS_CHANNEL.getName())) {
-                            ModelNode channel = DiscoveryGroupDefinition.JGROUPS_STACK.resolveModelAttribute(context, discoveryGroupModel);
+                        if (discoveryGroupModel.hasDefined(JGROUPS_CLUSTER.getName())) {
+                            ModelNode channel = DiscoveryGroupDefinition.JGROUPS_CHANNEL.resolveModelAttribute(context, discoveryGroupModel);
                             ServiceName commandDispatcherFactoryServiceName = channel.isDefined() ? ClusteringRequirement.COMMAND_DISPATCHER_FACTORY.getServiceName(context, channel.asString()) : ClusteringDefaultRequirement.COMMAND_DISPATCHER_FACTORY.getServiceName(context);
-                            String clusterName = JGROUPS_CHANNEL.resolveModelAttribute(context, discoveryGroupModel).asString();
+                            String clusterName = JGROUPS_CLUSTER.resolveModelAttribute(context, discoveryGroupModel).asString();
                             serviceBuilder.addDependency(commandDispatcherFactoryServiceName, CommandDispatcherFactory.class, serverService.getCommandDispatcherFactoryInjector(key));
                             serverService.getClusterNames().put(key, clusterName);
                         } else {
@@ -392,6 +395,24 @@ class ServerAdd extends AbstractAddStepHandler {
                 context.completeStep(OperationContext.RollbackHandler.NOOP_ROLLBACK_HANDLER);
             }
         }, OperationContext.Stage.RUNTIME);
+    }
+
+    /**
+     * Determines whether a socket-binding with the given name corresponds to a (local or remote) outbound-socket-binding
+     * or a socket-binding.
+     *
+     * If no socket-binding or outbound-socket-binding resources matches, throw an OperationFailedException.
+     */
+    private boolean isOutBoundSocketBinding(OperationContext context, String name) throws OperationFailedException {
+        Resource root = context.readResourceFromRoot(PathAddress.EMPTY_ADDRESS);
+        for (Resource.ResourceEntry resource : root.getChildren(ModelDescriptionConstants.SOCKET_BINDING_GROUP)) {
+            if (resource.getChildrenNames(ModelDescriptionConstants.SOCKET_BINDING).contains(name)) {
+                return false;
+            } else if (resource.getChildrenNames(ModelDescriptionConstants.LOCAL_DESTINATION_OUTBOUND_SOCKET_BINDING).contains(name)
+                    || resource.getChildrenNames(ModelDescriptionConstants.REMOTE_DESTINATION_OUTBOUND_SOCKET_BINDING).contains(name))
+                return true;
+        }
+        throw MessagingLogger.ROOT_LOGGER.noSocketBinding(name);
     }
 
     /**

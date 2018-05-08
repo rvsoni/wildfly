@@ -28,7 +28,6 @@ import java.util.stream.Stream;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.jboss.arquillian.container.test.api.Deployer;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.api.WildFlyContainerController;
 import org.jboss.as.test.clustering.NodeUtil;
@@ -85,6 +84,7 @@ public abstract class AbstractClusteringTestCase {
 
     // Timeouts
     public static final int GRACE_TIME_TO_REPLICATE = TimeoutUtil.adjust(3000);
+    public static final int GRACE_TIME_TOPOLOGY_CHANGE = TimeoutUtil.adjust(3000);
     public static final int GRACEFUL_SHUTDOWN_TIMEOUT = TimeoutUtil.adjust(15);
     public static final int GRACE_TIME_TO_MEMBERSHIP_CHANGE = TimeoutUtil.adjust(10000);
     public static final int WAIT_FOR_PASSIVATION_MS = TimeoutUtil.adjust(5);
@@ -144,7 +144,6 @@ public abstract class AbstractClusteringTestCase {
      * Guarantees that prior to test method execution both containers are running and both deployments are deployed.
      */
     @Before
-    @RunAsClient // Does not work, see https://issues.jboss.org/browse/ARQ-351
     public void beforeTestMethod() throws Exception {
         NodeUtil.start(this.controller, nodes);
         NodeUtil.deploy(this.deployer, deployments);
@@ -154,7 +153,6 @@ public abstract class AbstractClusteringTestCase {
      * Guarantees that all deployments are undeployed after the test method has been executed.
      */
     @After
-    @RunAsClient // Does not work, see https://issues.jboss.org/browse/ARQ-351
     public void afterTestMethod() throws Exception {
         NodeUtil.start(this.controller, nodes);
         NodeUtil.undeploy(this.deployer, deployments);

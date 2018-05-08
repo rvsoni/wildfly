@@ -39,19 +39,20 @@ import org.jboss.arquillian.container.test.api.ContainerController;
 import org.jboss.arquillian.container.test.api.Deployer;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.junit.InSequence;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.controller.client.ModelControllerClient;
 import org.jboss.as.test.clustering.NodeUtil;
+import org.jboss.as.test.shared.IntermittentFailure;
 import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.jboss.dmr.ModelNode;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.wildfly.test.api.Authentication;
@@ -61,10 +62,9 @@ import org.wildfly.test.api.Authentication;
  * @author Jan Martiska
  */
 @RunWith(Arquillian.class)
-@RunAsClient
 public class ClusteredJPA2LCTestCase {
 
-    private static final String MODULE_NAME = "clustered2lc";
+    private static final String MODULE_NAME = ClusteredJPA2LCTestCase.class.getSimpleName();
 
     @ArquillianResource
     protected ContainerController controller;
@@ -111,6 +111,11 @@ public class ClusteredJPA2LCTestCase {
         CACHE_ADDRESS.get("replicated-cache").set("entity-replicated");
     }
 
+    @BeforeClass
+    public static void ignore() {
+        IntermittentFailure.thisTestIsFailingIntermittently("WFLY-10099");
+    }
+
     @Test
     @InSequence(-1)
     public void setupCacheContainer() throws IOException {
@@ -141,7 +146,7 @@ public class ClusteredJPA2LCTestCase {
      * The two nodes don't actually have a shared database instance, but that doesn't matter for this test.
      */
     @Test
-    @InSequence(0)
+    @InSequence
     public void testEntityCacheReplication(@ArquillianResource @OperateOnDeployment(DEPLOYMENT_1) URL url0,
                                            @ArquillianResource @OperateOnDeployment(DEPLOYMENT_2) URL url1)
             throws Exception {

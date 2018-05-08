@@ -24,14 +24,13 @@ package org.jboss.as.clustering.controller;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiPredicate;
-import java.util.stream.Stream;
+import java.util.function.Predicate;
 
 import org.jboss.as.controller.AbstractAddStepHandler;
 import org.jboss.as.controller.AttributeDefinition;
+import org.jboss.as.controller.CapabilityReferenceRecorder;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
@@ -95,18 +94,19 @@ public class AddStepHandler extends AbstractAddStepHandler implements Registrati
                     return;
                 }
             }
-            Optional<PathElement> singletonPathResult = parentDescriptor.getRequiredSingletonChildren().stream().filter(requiredPath -> requiredPath.getKey().equals(path.getKey())).findFirst();
-            if (singletonPathResult.isPresent()) {
-                PathElement singletonPath = singletonPathResult.get();
-                Set<String> childrenNames = context.readResourceFromRoot(parentAddress, false).getChildrenNames(singletonPath.getKey());
-                if (!childrenNames.isEmpty()) {
-                    // If there is a required singleton sibling resource, we need to remove it first
-                    childrenNames.forEach(childName -> {
-                        PathAddress singletonAddress = parentAddress.append(singletonPath.getKey(), childName);
-                        context.addStep(Util.createRemoveOperation(singletonAddress), context.getRootResourceRegistration().getOperationHandler(singletonAddress, ModelDescriptionConstants.REMOVE), OperationContext.Stage.MODEL);
-                    });
-                    context.addStep(operation, this, OperationContext.Stage.MODEL);
-                    return;
+            for (PathElement requiredPath : parentDescriptor.getRequiredSingletonChildren()) {
+                String requiredPathKey = requiredPath.getKey();
+                if (requiredPath.getKey().equals(path.getKey())) {
+                    Set<String> childrenNames = context.readResourceFromRoot(parentAddress, false).getChildrenNames(requiredPathKey);
+                    if (!childrenNames.isEmpty()) {
+                        // If there is a required singleton sibling resource, we need to remove it first
+                        for (String childName : childrenNames) {
+                            PathAddress singletonAddress = parentAddress.append(requiredPathKey, childName);
+                            context.addStep(Util.createRemoveOperation(singletonAddress), context.getRootResourceRegistration().getOperationHandler(singletonAddress, ModelDescriptionConstants.REMOVE), OperationContext.Stage.MODEL);
+                        }
+                        context.addStep(operation, this, OperationContext.Stage.MODEL);
+                        return;
+                    }
                 }
             }
         }
@@ -114,7 +114,9 @@ public class AddStepHandler extends AbstractAddStepHandler implements Registrati
         super.execute(context, operation);
 
         if (this.requiresRuntime(context)) {
-            this.descriptor.getRuntimeResourceRegistrations().forEach(r -> context.addStep((c, op) -> r.register(c), OperationContext.Stage.MODEL));
+            for (RuntimeResourceRegistration registration : this.descriptor.getRuntimeResourceRegistrations()) {
+                context.addStep(new RuntimeResourceRegistrationStepHandler(registration), OperationContext.Stage.MODEL);
+            }
         }
     }
 
@@ -124,18 +126,30 @@ public class AddStepHandler extends AbstractAddStepHandler implements Registrati
         for (AttributeDefinition definition : this.descriptor.getExtraParameters()) {
             definition.validateOperation(operation);
         }
+        PathAddress currentAddress = context.getCurrentAddress();
         // Validate and apply attribute translations
         Map<AttributeDefinition, AttributeTranslation> translations = this.descriptor.getAttributeTranslations();
         for (Map.Entry<AttributeDefinition, AttributeTranslation> entry : translations.entrySet()) {
-            AttributeDefinition alias = entry.getKey();
+            AttributeDefinition sourceParameter = entry.getKey();
             AttributeTranslation translation = entry.getValue();
-            Attribute target = translation.getTargetAttribute();
-            String targetName = target.getName();
-            if (operation.hasDefined(alias.getName()) && !operation.hasDefined(targetName)) {
-                ModelNode value = alias.validateOperation(operation);
-                ModelNode translatedValue = translation.getWriteTranslator().translate(context, value);
-                // Target attribute will be validated by super implementation
-                operation.get(targetName).set(translatedValue);
+            if (operation.hasDefined(sourceParameter.getName())) {
+                ModelNode value = sourceParameter.validateOperation(operation);
+                ModelNode targetValue = translation.getWriteTranslator().translate(context, value);
+                Attribute targetAttribute = translation.getTargetAttribute();
+                PathAddress targetAddress = translation.getPathAddressTransformation().apply(currentAddress);
+                // If target attribute exists in the current resource, just fix the operation
+                // Otherwise, we need a separate write-attribute operation
+                if (targetAddress == currentAddress) {
+                    String targetName = targetAttribute.getName();
+                    if (!operation.hasDefined(targetName)) {
+                        operation.get(targetName).set(targetValue);
+                    }
+                } else {
+                    ModelNode writeAttributeOperation = Operations.createWriteAttributeOperation(targetAddress, targetAttribute, targetValue);
+                    ImmutableManagementResourceRegistration targetRegistration = translation.getResourceRegistrationTransformation().apply(context.getResourceRegistration());
+                    OperationStepHandler writeAttributeHandler = targetRegistration.getAttributeAccess(PathAddress.EMPTY_ADDRESS, targetAttribute.getName()).getWriteHandler();
+                    context.addStep(writeAttributeOperation, writeAttributeHandler, OperationContext.Stage.MODEL);
+                }
             }
         }
         // Validate proper attributes
@@ -155,7 +169,9 @@ public class AddStepHandler extends AbstractAddStepHandler implements Registrati
     }
 
     private static void addRequiredChildren(OperationContext context, Collection<PathElement> paths, BiPredicate<Resource, PathElement> present) {
-        paths.forEach(path -> context.addStep(Util.createAddOperation(context.getCurrentAddress().append(path)), new AddIfAbsentStepHandler(present), OperationContext.Stage.MODEL));
+        for (PathElement path : paths) {
+            context.addStep(Util.createAddOperation(context.getCurrentAddress().append(path)), new AddIfAbsentStepHandler(present), OperationContext.Stage.MODEL);
+        }
     }
 
     @Override
@@ -178,17 +194,23 @@ public class AddStepHandler extends AbstractAddStepHandler implements Registrati
         ModelNode model = resource.getModel();
         // The super implementation assumes that the capability name is a simple extension of the base name - we do not.
         // Only register capabilities when allowed by the associated predicate
-        this.descriptor.getCapabilities().entrySet().stream().filter(entry -> entry.getValue().test(model)).map(Map.Entry::getKey).forEach(capability -> context.registerCapability(capability.resolve(address)));
+        for (Map.Entry<Capability, Predicate<ModelNode>> entry : this.descriptor.getCapabilities().entrySet()) {
+            if (entry.getValue().test(model)) {
+                context.registerCapability(entry.getKey().resolve(address));
+            }
+        }
 
         ImmutableManagementResourceRegistration registration = context.getResourceRegistration();
-        registration.getAttributeNames(PathAddress.EMPTY_ADDRESS).stream().map(name -> registration.getAttributeAccess(PathAddress.EMPTY_ADDRESS, name))
-                .filter(Objects::nonNull)
-                .map(AttributeAccess::getAttributeDefinition)
-                    .filter(Objects::nonNull)
-                    .filter(AttributeDefinition::hasCapabilityRequirements)
-                    .forEach(attribute -> attribute.addCapabilityRequirements(context, resource, model.get(attribute.getName())));
+        for (String attributeName : registration.getAttributeNames(PathAddress.EMPTY_ADDRESS)) {
+            AttributeDefinition attribute = registration.getAttributeAccess(PathAddress.EMPTY_ADDRESS, attributeName).getAttributeDefinition();
+            if (attribute.hasCapabilityRequirements()) {
+                attribute.addCapabilityRequirements(context, resource, model.get(attributeName));
+            }
+        }
 
-        this.descriptor.getResourceCapabilityReferences().forEach((reference, resolver) -> reference.addCapabilityRequirements(context, resource, null, resolver.apply(address)));
+        for (CapabilityReferenceRecorder recorder : context.getResourceRegistration().getRequirements()) {
+            recorder.addCapabilityRequirements(context, resource, null);
+        }
     }
 
     @Override
@@ -197,10 +219,15 @@ public class AddStepHandler extends AbstractAddStepHandler implements Registrati
         if (registration.isOrderedChildResource()) {
             builder.addParameter(SimpleAttributeDefinitionBuilder.create(ModelDescriptionConstants.ADD_INDEX, ModelType.INT, true).build());
         }
-        Stream<AttributeDefinition> parameters = this.descriptor.getAttributes().stream();
-        parameters = Stream.concat(parameters, this.descriptor.getExtraParameters().stream());
-        parameters = Stream.concat(parameters, this.descriptor.getAttributeTranslations().keySet().stream());
-        parameters.forEach(attribute -> builder.addParameter(attribute));
+        for (AttributeDefinition attribute : this.descriptor.getAttributes()) {
+            builder.addParameter(attribute);
+        }
+        for (AttributeDefinition parameter : this.descriptor.getExtraParameters()) {
+            builder.addParameter(parameter);
+        }
+        for (AttributeDefinition attribute : this.descriptor.getAttributeTranslations().keySet()) {
+            builder.addParameter(attribute);
+        }
         registration.registerOperationHandler(builder.build(), this.descriptor.getAddOperationTransformation().apply(this));
     }
 }

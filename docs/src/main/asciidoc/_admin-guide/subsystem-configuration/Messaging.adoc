@@ -1,3 +1,4 @@
+[[Messaging]]
 = Messaging configuration
 
 The JMS server configuration is done through the _messaging-activemq_
@@ -557,7 +558,6 @@ CLI:
 }
 ----
 
-[[component-reference]]
 == Component Reference
 
 The messaging-activemq subsystem is provided by the Artemis project. For
@@ -581,5 +581,7 @@ include::Messaging_Backward_&_Forward_Compatibility.adoc[]
 include::Mesaging_AIO_-_NIO_for_messaging_journal.adoc[]
 
 include::Messaging_JDBC_Store_for_Messaging_Journal.adoc[]
+
+include::Messaging_Discovery_Configuration.adoc[]
 
 :leveloffset: -1

@@ -23,9 +23,9 @@ package org.wildfly.clustering.server.provider;
 
 import java.util.Set;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import org.infinispan.Cache;
+import org.infinispan.remoting.transport.Address;
 import org.jboss.as.clustering.controller.CapabilityServiceBuilder;
 import org.jboss.as.clustering.function.Consumers;
 import org.jboss.as.clustering.function.Functions;
@@ -39,12 +39,12 @@ import org.wildfly.clustering.dispatcher.CommandDispatcherFactory;
 import org.wildfly.clustering.ee.Batch;
 import org.wildfly.clustering.ee.Batcher;
 import org.wildfly.clustering.ee.infinispan.InfinispanBatcher;
-import org.wildfly.clustering.group.Group;
-import org.wildfly.clustering.group.Node;
 import org.wildfly.clustering.infinispan.spi.InfinispanCacheRequirement;
 import org.wildfly.clustering.provider.ServiceProviderRegistry;
+import org.wildfly.clustering.server.group.Group;
 import org.wildfly.clustering.service.AsynchronousServiceBuilder;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.CompositeDependency;
 import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.SuppliedValueService;
 import org.wildfly.clustering.service.ValueDependency;
@@ -55,16 +55,15 @@ import org.wildfly.clustering.spi.ClusteringRequirement;
  * Builds a clustered {@link ServiceProviderRegistrationFactory} service.
  * @author Paul Ferraro
  */
-public class CacheServiceProviderRegistryBuilder<T> implements CapabilityServiceBuilder<ServiceProviderRegistry<T>>, CacheServiceProviderRegistryConfiguration<T> {
+public class CacheServiceProviderRegistryBuilder<T> implements CapabilityServiceBuilder<ServiceProviderRegistry<T>>, CacheServiceProviderRegistryConfiguration<T>, Supplier<CacheServiceProviderRegistry<T>> {
 
     private final ServiceName name;
     private final String containerName;
     private final String cacheName;
 
     private volatile ValueDependency<CommandDispatcherFactory> dispatcherFactory;
-    private volatile ValueDependency<Group> group;
-    @SuppressWarnings("rawtypes")
-    private volatile ValueDependency<Cache> cache;
+    private volatile ValueDependency<Group<Address>> group;
+    private volatile ValueDependency<Cache<T, Set<Address>>> cache;
 
     public CacheServiceProviderRegistryBuilder(ServiceName name, String containerName, String cacheName) {
         this.name = name;
@@ -73,25 +72,29 @@ public class CacheServiceProviderRegistryBuilder<T> implements CapabilityService
     }
 
     @Override
+    public CacheServiceProviderRegistry<T> get() {
+        return new CacheServiceProviderRegistry<>(this);
+    }
+
+    @Override
     public ServiceName getServiceName() {
         return this.name;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public Builder<ServiceProviderRegistry<T>> configure(CapabilityServiceSupport support) {
-        this.cache = new InjectedValueDependency<>(InfinispanCacheRequirement.CACHE.getServiceName(support, this.containerName, this.cacheName), Cache.class);
+        this.cache = new InjectedValueDependency<>(InfinispanCacheRequirement.CACHE.getServiceName(support, this.containerName, this.cacheName), (Class<Cache<T, Set<Address>>>) (Class<?>) Cache.class);
         this.dispatcherFactory = new InjectedValueDependency<>(ClusteringRequirement.COMMAND_DISPATCHER_FACTORY.getServiceName(support, this.containerName), CommandDispatcherFactory.class);
-        this.group = new InjectedValueDependency<>(ClusteringCacheRequirement.GROUP.getServiceName(support, this.containerName, this.cacheName), Group.class);
+        this.group = new InjectedValueDependency<>(ClusteringCacheRequirement.GROUP.getServiceName(support, this.containerName, this.cacheName), (Class<Group<Address>>) (Class<?>) Group.class);
         return this;
     }
 
     @Override
     public ServiceBuilder<ServiceProviderRegistry<T>> build(ServiceTarget target) {
-        Supplier<CacheServiceProviderRegistry<T>> supplier = () -> new CacheServiceProviderRegistry<>(this);
-        Service<ServiceProviderRegistry<T>> service = new SuppliedValueService<>(Functions.identity(), supplier, Consumers.close());
+        Service<ServiceProviderRegistry<T>> service = new SuppliedValueService<>(Functions.identity(), this, Consumers.close());
         ServiceBuilder<ServiceProviderRegistry<T>> builder = new AsynchronousServiceBuilder<>(this.name, service).build(target).setInitialMode(ServiceController.Mode.ON_DEMAND);
-        Stream.of(this.cache, this.dispatcherFactory, this.group).forEach(dependency -> dependency.register(builder));
-        return builder;
+        return new CompositeDependency(this.cache, this.dispatcherFactory, this.group).register(builder);
     }
 
     @Override
@@ -100,12 +103,12 @@ public class CacheServiceProviderRegistryBuilder<T> implements CapabilityService
     }
 
     @Override
-    public Group getGroup() {
+    public Group<Address> getGroup() {
         return this.group.getValue();
     }
 
     @Override
-    public Cache<T, Set<Node>> getCache() {
+    public Cache<T, Set<Address>> getCache() {
         return this.cache.getValue();
     }
 

@@ -22,7 +22,7 @@
   ~ 02110-1301 USA, or see the FSF site: http://www.fsf.org.
   -->
 
-<module xmlns="urn:jboss:module:1.5" name="org.jboss.as.weld.transactions">
+<module xmlns="urn:jboss:module:1.8" name="org.jboss.as.weld.transactions">
 
     <properties>
         <property name="jboss.api" value="private"/>
@@ -45,7 +45,6 @@
         <module name="org.jboss.modules"/>
         <module name="org.jboss.msc"/>
         <module name="javax.transaction.api"/>
-        <module name="org.omg.api"/>
     </dependencies>
 
 </module>

@@ -12,15 +12,19 @@
     <fileSets>
         <fileSet>
             <directory>..</directory>
-            <outputDirectory>${server.output.dir.prefix}-${jboss.as.release.version}-src</outputDirectory>
+            <outputDirectory>${server.output.dir.prefix}-${server.output.dir.version}-src</outputDirectory>
             <includes>
                 <include>**/*.xml</include>
                 <include>**/src/**</include>
                 <include>**/*.txt</include>
                 <include>**/*.sh</include>
+                <include>**/*.cli</include>
                 <include>**/*.bat</include>
                 <include>**/*.md</include>
                 <include>tools/**</include>
+                <include>mvnw</include>
+                <include>mvnw.cmd</include>
+                <include>.mvn/**</include>
             </includes>
             <excludes>
                 <!-- Ignore build output -->

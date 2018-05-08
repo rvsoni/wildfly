@@ -41,9 +41,9 @@
         sock_conn_timeout="300"
         port_range="0"
     />
-    <TCPGOSSIP port_range="0"/>
     <TCPPING port_range="0"/>
     <MPING ip_ttl="2"/>
+    <kubernetes.KUBE_PING port_range="0"/>
     <MERGE3
         min_interval="10000"
         max_interval="30000"
@@ -58,9 +58,12 @@
         timeout_check_interval="5000"/>
     <FD_SOCK port_range="0"/>
     <VERIFY_SUSPECT timeout="5000"/>
-    <pbcast.NAKACK2 xmit_table_num_rows="50"/>
+    <pbcast.NAKACK2
+        xmit_interval="100"
+        xmit_table_num_rows="50"
+    />
     <UNICAST3
-        conn_expiry_timeout="0"
+        xmit_interval="100"
         xmit_table_num_rows="50"
     />
     <pbcast.STABLE

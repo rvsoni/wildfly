@@ -1,9 +1,0 @@
-= Changes From Previous Versions
-
-Describe here key changes between releases.
-
-[[key-changes]]
-== Key changes
-
-[[migration-to-wildfly]]
-== Migration to Wildfly

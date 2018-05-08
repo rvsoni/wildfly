@@ -112,12 +112,7 @@ public class JGroupsSubsystemXMLWriter implements XMLElementWriter<SubsystemMars
         writeAttributes(writer, transport, TransportResourceDefinition.Attribute.class);
         writeAttributes(writer, transport, TransportResourceDefinition.ThreadingAttribute.class);
         writeElement(writer, transport, AbstractProtocolResourceDefinition.Attribute.PROPERTIES);
-        if (transport.hasDefined(ThreadPoolResourceDefinition.WILDCARD_PATH.getKey())) {
-            writeThreadPoolElements(XMLElement.DEFAULT_THREAD_POOL, ThreadPoolResourceDefinition.DEFAULT, writer, transport);
-            writeThreadPoolElements(XMLElement.INTERNAL_THREAD_POOL, ThreadPoolResourceDefinition.INTERNAL, writer, transport);
-            writeThreadPoolElements(XMLElement.OOB_THREAD_POOL, ThreadPoolResourceDefinition.OOB, writer, transport);
-            writeThreadPoolElements(XMLElement.TIMER_THREAD_POOL, ThreadPoolResourceDefinition.TIMER, writer, transport);
-        }
+        writeThreadPoolElements(XMLElement.DEFAULT_THREAD_POOL, ThreadPoolResourceDefinition.DEFAULT, writer, transport);
         writer.writeEndElement();
     }
 
@@ -137,19 +132,29 @@ public class JGroupsSubsystemXMLWriter implements XMLElementWriter<SubsystemMars
     private static void writeProtocolAttributes(XMLExtendedStreamWriter writer, Property property) throws XMLStreamException {
         writeGenericProtocolAttributes(writer, property);
 
-        if (ProtocolRegistration.ProtocolType.MULTICAST_SOCKET.contains(property.getName())) {
+        String protocol = property.getName();
+        if (containsName(ProtocolRegistration.MulticastProtocol.class, protocol)) {
             writeAttributes(writer, property.getValue(), SocketBindingProtocolResourceDefinition.Attribute.class);
-        } else if (ProtocolRegistration.ProtocolType.JDBC.contains(property.getName())) {
+        } else if (containsName(ProtocolRegistration.JdbcProtocol.class, protocol)) {
             writeAttributes(writer, property.getValue(), JDBCProtocolResourceDefinition.Attribute.class);
-        } else if (ProtocolRegistration.ProtocolType.ENCRYPT.contains(property.getName())) {
+        } else if (containsName(ProtocolRegistration.EncryptProtocol.class, protocol)) {
             writeAttributes(writer, property.getValue(), EncryptProtocolResourceDefinition.Attribute.class);
-        } else if (ProtocolRegistration.ProtocolType.SOCKET_DISCOVERY.contains(property.getName())) {
+        } else if (containsName(ProtocolRegistration.InitialHostsProtocol.class, protocol)) {
             writeAttributes(writer, property.getValue(), SocketDiscoveryProtocolResourceDefinition.Attribute.class);
-        } else if (ProtocolRegistration.ProtocolType.AUTH.contains(property.getName())) {
+        } else if (containsName(ProtocolRegistration.AuthProtocol.class, protocol)) {
             writeAuthToken(writer, property.getValue().get(AuthTokenResourceDefinition.WILDCARD_PATH.getKey()).asProperty());
         } else {
             writeAttributes(writer, property.getValue(), GenericProtocolResourceDefinition.DeprecatedAttribute.class);
         }
+    }
+
+    private static <E extends Enum<E>> boolean containsName(Class<E> enumClass, String name) {
+        for (E protocol : EnumSet.allOf(enumClass)) {
+            if (name.equals(protocol.name())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void writeAuthToken(XMLExtendedStreamWriter writer, Property token) throws XMLStreamException {
@@ -195,7 +200,10 @@ public class JGroupsSubsystemXMLWriter implements XMLElementWriter<SubsystemMars
     }
 
     private static boolean hasDefined(ModelNode model, Collection<? extends Attribute> attributes) {
-        return attributes.stream().anyMatch(attribute -> model.hasDefined(attribute.getName()));
+        for (Attribute attribute : attributes) {
+            if (model.hasDefined(attribute.getName())) return true;
+        }
+        return false;
     }
 
     private static <A extends Enum<A> & Attribute> void writeAttributes(XMLExtendedStreamWriter writer, ModelNode model, Class<A> attributeClass) throws XMLStreamException {

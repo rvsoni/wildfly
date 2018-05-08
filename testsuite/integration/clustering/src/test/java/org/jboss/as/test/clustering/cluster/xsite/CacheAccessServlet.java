@@ -36,6 +36,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.infinispan.Cache;
+import org.infinispan.manager.EmbeddedCacheManager;
+import org.infinispan.marshall.core.ExternallyMarshallable;
 
 /**
  * Servlet providing get/put access to Infinispan cache instance.
@@ -56,7 +58,7 @@ import org.infinispan.Cache;
  *
  * @author Richard Achmatowicz
  */
-@WebServlet(urlPatterns = { CacheAccessServlet.SERVLET_PATH })
+@WebServlet(urlPatterns = { CacheAccessServlet.SERVLET_PATH }, loadOnStartup = 0)
 public class CacheAccessServlet extends HttpServlet {
     private static final long serialVersionUID = 9130271954748513391L;
     private static final String SERVLET_NAME = "cache";
@@ -85,8 +87,15 @@ public class CacheAccessServlet extends HttpServlet {
         return baseURL.toURI().resolve(builder.toString());
     }
 
-    @Resource(name="TheTargetCache")
+    @Resource(name="infinispan/container")
+    private EmbeddedCacheManager manager;
     private Cache<String, Custom> cache;
+
+    @Override
+    public void init() throws ServletException {
+        ExternallyMarshallable.addToWhiteList(Custom.class.getName());
+        this.cache = this.manager.getCache();
+    }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {

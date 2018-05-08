@@ -25,9 +25,11 @@ package org.jboss.as.clustering.infinispan.subsystem;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 import org.jboss.as.clustering.controller.ManagementResourceRegistration;
 import org.jboss.as.clustering.controller.Operations;
+import org.jboss.as.clustering.controller.ResourceDescriptor;
 import org.jboss.as.clustering.controller.SimpleAliasEntry;
 import org.jboss.as.clustering.controller.transform.LegacyPropertyResourceTransformer;
 import org.jboss.as.controller.AttributeDefinition;
@@ -63,7 +65,7 @@ public class StringKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
 
     @Deprecated
     enum DeprecatedAttribute implements org.jboss.as.clustering.controller.Attribute {
-        TABLE("string-keyed-table", StringTableResourceDefinition.Attribute.values(), TableResourceDefinition.Attribute.values(), TableResourceDefinition.ColumnAttribute.values()),
+        TABLE("string-keyed-table", StringTableResourceDefinition.Attribute.values(), TableResourceDefinition.Attribute.values(), TableResourceDefinition.DeprecatedAttribute.values(), TableResourceDefinition.ColumnAttribute.values()),
         ;
         private final AttributeDefinition definition;
 
@@ -98,13 +100,16 @@ public class StringKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
 
         if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
             builder.setCustomResourceTransformer(new ResourceTransformer() {
+                @SuppressWarnings("deprecation")
                 @Override
                 public void transformResource(ResourceTransformationContext context, PathAddress address, Resource resource) throws OperationFailedException {
                     final ModelNode model = resource.getModel();
+                    final ModelNode maxBatchSize = model.remove(StoreResourceDefinition.Attribute.MAX_BATCH_SIZE.getName());
 
                     final ModelNode stringTableModel = Resource.Tools.readModel(resource.removeChild(StringTableResourceDefinition.PATH));
                     if (stringTableModel != null && stringTableModel.isDefined()) {
                         model.get(DeprecatedAttribute.TABLE.getName()).set(stringTableModel);
+                        model.get(DeprecatedAttribute.TABLE.getName()).get(TableResourceDefinition.DeprecatedAttribute.BATCH_SIZE.getName()).set((maxBatchSize != null) ? maxBatchSize : new ModelNode());
                     }
 
                     final ModelNode properties = model.remove(StoreResourceDefinition.Attribute.PROPERTIES.getName());
@@ -119,24 +124,32 @@ public class StringKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
         StringTableResourceDefinition.buildTransformation(version, builder);
     }
 
-    StringKeyedJDBCStoreResourceDefinition() {
-        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, WILDCARD_PATH), descriptor -> descriptor
-                .addExtraParameters(DeprecatedAttribute.class)
-                .addRequiredChildren(StringTableResourceDefinition.PATH)
-                // Translate deprecated TABLE attribute into separate add table operation
-                .setAddOperationTransformation(new TableAttributeTransformation(DeprecatedAttribute.TABLE, StringTableResourceDefinition.PATH))
-            , address -> new StringKeyedJDBCStoreBuilder(address.getParent()), registration -> {
-                registration.registerReadWriteAttribute(DeprecatedAttribute.TABLE.getDefinition(), LEGACY_READ_TABLE_HANDLER, LEGACY_WRITE_TABLE_HANDLER);
+    static class ResourceDescriptorConfigurator implements UnaryOperator<ResourceDescriptor> {
+        @Override
+        public ResourceDescriptor apply(ResourceDescriptor descriptor) {
+            return descriptor.addExtraParameters(DeprecatedAttribute.class)
+                    .addRequiredChildren(StringTableResourceDefinition.PATH)
+                    // Translate deprecated TABLE attribute into separate add table operation
+                    .setAddOperationTransformation(new TableAttributeTransformation(DeprecatedAttribute.TABLE, StringTableResourceDefinition.PATH))
+                    ;
+        }
+    }
 
-                new StringTableResourceDefinition().register(registration);
-            });
+    StringKeyedJDBCStoreResourceDefinition() {
+        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, WILDCARD_PATH), new ResourceDescriptorConfigurator());
     }
 
     @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        super.register(parentRegistration);
-        org.jboss.as.controller.registry.ManagementResourceRegistration registration = parentRegistration.getSubModel(PathAddress.pathAddress(PATH));
-        parentRegistration.registerAlias(STRING_JDBC_PATH, new SimpleAliasEntry(registration));
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = super.register(parent);
+
+        parent.registerAlias(STRING_JDBC_PATH, new SimpleAliasEntry(registration));
+
+        registration.registerReadWriteAttribute(DeprecatedAttribute.TABLE.getDefinition(), LEGACY_READ_TABLE_HANDLER, LEGACY_WRITE_TABLE_HANDLER);
+
+        new StringTableResourceDefinition().register(registration);
+
+        return registration;
     }
 
     static final OperationStepHandler LEGACY_READ_TABLE_HANDLER = new OperationStepHandler() {
@@ -150,11 +163,12 @@ public class StringKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDef
     };
 
     static final OperationStepHandler LEGACY_WRITE_TABLE_HANDLER = new OperationStepHandler() {
+        @SuppressWarnings("deprecation")
         @Override
         public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
             PathAddress address = context.getCurrentAddress().append(StringTableResourceDefinition.PATH);
             ModelNode table = Operations.getAttributeValue(operation);
-            for (Class<? extends org.jboss.as.clustering.controller.Attribute> attributeClass : Arrays.asList(StringTableResourceDefinition.Attribute.class, TableResourceDefinition.Attribute.class)) {
+            for (Class<? extends org.jboss.as.clustering.controller.Attribute> attributeClass : Arrays.asList(StringTableResourceDefinition.Attribute.class, TableResourceDefinition.Attribute.class, TableResourceDefinition.DeprecatedAttribute.class)) {
                 for (org.jboss.as.clustering.controller.Attribute attribute : attributeClass.getEnumConstants()) {
                     ModelNode writeAttributeOperation = Operations.createWriteAttributeOperation(address, attribute, table.get(attribute.getName()));
                     context.addStep(writeAttributeOperation, context.getResourceRegistration().getAttributeAccess(PathAddress.pathAddress(StringTableResourceDefinition.PATH), attribute.getName()).getWriteHandler(), context.getCurrentStage());

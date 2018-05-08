@@ -22,16 +22,16 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.EnumSet;
 
 import org.jboss.as.clustering.controller.Registration;
+import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
+import org.jgroups.protocols.TP;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
+import org.wildfly.clustering.jgroups.spi.TransportConfiguration;
 
 /**
  * Registers transport definitions, including any definition overrides.
@@ -39,30 +39,24 @@ import org.wildfly.clustering.jgroups.spi.ChannelFactory;
  */
 public class TransportRegistration implements Registration<ManagementResourceRegistration> {
 
-    enum TransportType implements Iterable<String> {
-        MULTICAST("UDP"),
-        ;
-        private Set<String> transports;
+    enum MulticastTransport {
+        UDP;
 
-        TransportType(String transport) {
-            this.transports = Collections.singleton(transport);
+        static boolean contains(String name) {
+            for (MulticastTransport protocol : EnumSet.allOf(MulticastTransport.class)) {
+                if (name.equals(protocol.name())) {
+                    return true;
+                }
+            }
+            return false;
         }
+    }
 
-        TransportType(String... transports) {
-            this.transports = Collections.unmodifiableSet(Stream.of(transports).collect(Collectors.toSet()));
-        }
-
+    static class TransportResourceServiceBuilderFactory<T extends TP> implements ResourceServiceBuilderFactory<TransportConfiguration<T>> {
+        @SuppressWarnings("unchecked")
         @Override
-        public Iterator<String> iterator() {
-            return this.transports.iterator();
-        }
-
-        Stream<String> stream() {
-            return this.transports.stream();
-        }
-
-        boolean contains(String transport) {
-            return this.transports.contains(transport);
+        public ResourceServiceBuilder<TransportConfiguration<T>> createBuilder(PathAddress address) {
+            return MulticastTransport.contains(address.getLastElement().getValue()) ? (TransportConfigurationBuilder<T>) new MulticastTransportConfigurationBuilder(address) : new TransportConfigurationBuilder<>(address);
         }
     }
 
@@ -74,6 +68,6 @@ public class TransportRegistration implements Registration<ManagementResourceReg
 
     @Override
     public void register(ManagementResourceRegistration registration) {
-        new TransportResourceDefinition<>(address -> TransportType.MULTICAST.contains(address.getLastElement().getValue()) ? new MulticastTransportConfigurationBuilder<>(address) : new TransportConfigurationBuilder<>(address), this.parentBuilderFactory).register(registration);
+        new TransportResourceDefinition<>(new TransportResourceServiceBuilderFactory<>(), this.parentBuilderFactory).register(registration);
     }
 }

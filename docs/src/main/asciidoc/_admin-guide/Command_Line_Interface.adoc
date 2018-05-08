@@ -1,3 +1,4 @@
+[[Command_Line_Interface]]
 = Command Line Interface
 
 The Command Line Interface (CLI) is a management tool for a managed
@@ -11,7 +12,7 @@ available through the de-typed management model.
 Depending on the operating system, the CLI is launched using
 `jboss-cli.sh` or `jboss-cli.bat` located in the WildFly `bin`
 directory. For further information on the default directory structure,
-please consult the " link:Getting_Started_Guide.adoc[Getting Started
+please consult the " link:Getting_Started_Guide{outfilesuffix}[Getting Started
 Guide]".
 
 The first thing to do after the CLI has started is to connect to a
@@ -60,6 +61,11 @@ the server: ./jboss-cli.sh --connect --controller=192.168.0.1:9990
 
 Help is also available:
 
+In order to list the set of commands that are currently available in the current context
+use the option _--commands_ (NB: the following examples are not displaying an
+exhaustive set of CLI commands, more and/or different commands could be available
+in your running CLI instance):
+
 [source, java]
 ----
 [domain@localhost:9990 /] help --commands
@@ -69,10 +75,48 @@ cd                  connection-info     echo       �
 clear               data-source         echo-dmr            jms-queue           quit                run-batch           unset
 command             deploy              help                jms-topic           read-attribute      set                 version
 connect             deployment-info     history             ls                  read-operation      shutdown            xa-data-source
-To read a description of a specific command execute 'command_name --help'.
+To read a description of a specific command execute 'help <command name>'.
 ----
 
-[[non-interactive-mode]]
+The _help_ command can print help for any command or operation. For operations,
+the operation description is formatted as a command help (synopsis, description and
+options). Some commands (eg: _patch_) expose two levels of documentation. A high
+level description for the command itself and a dedicated help content for each action (eg: _apply_).
+The help documentation of each command makes it clear if this two levels are available or not.
+
+Use Tab-completion to discover the set of commands and operations:
+
+[source, java]
+----
+help <TAB>
+----
+The list of all commands (enabled or not) is displayed.
+
+Examples
+
+* Display the help of the _patch_ command:
+
+[source, java]
+----
+help patch
+----
+
+* Display the help of the _apply_ action of the _patch_ command:
+
+[source, java]
+----
+help patch apply
+----
+
+* Display the description of the _elytron_ _key-store_ resource _add_ operation
+formatted as a command help content:
+
+[source, java]
+----
+help /subsystem=elytron/key-store=?:add
+----
+
+[[cli-non-interactive-mode]]
 == Non-interactive Mode
 
 The CLI can also be run in non-interactive mode to support scripts and
@@ -88,7 +132,7 @@ deployments
 ----
 $ ./bin/jboss-cli.sh --connect --commands=ls\ deployment
 sample.war
-osgi-bundle.jar
+business.jar
 ----
 
 The output can be combined with other shell commands for further
@@ -190,7 +234,7 @@ mechanism only works if the user running the CLI has read access to the
 standalone/tmp/auth folder or domain/tmp/auth folder under the
 respective WildFly installation - if the local mechanism fails then the
 CLI will fallback to prompting for a username and password for a user
-configured as in link:#src-557082[Default HTTP Interface Security].
+configured as in <<Default_HTTP_Interface_Security,Default HTTP Interface Security>>.
 
 Establishing a CLI connection to a remote server will require a username
 and password by default.
@@ -224,11 +268,41 @@ For example:
 
 Tab Completion
 
+Tab-completion is supported for all commands and options, i.e.
+node-types and node-names, operation names and parameter names.
+
+In operation Tab-completion, required parameters have a name terminated by the
+'*' character. This helps identify which are the parameters that must be set in order to
+construct a valid operation. Furthermore, Tab-completion does not propose
+parameters that are alternatives of parameters already present in the operation.
+
+For example:
+[source,java]
+----
+/deployment=myapp:add(<TAB>
+!  content*  enabled  runtime-name
+----
+The parameter _content_ is required and completion advertises it with a '*' character.
+
+[source,java]
+----
+/deployment=myapp:add-content(content=[{<TAB>
+bytes*  hash*  input-stream-index*  target-path*  url*
+----
+_bytes_, _hash_, _input-stream-index_ and _url_ are required but also alternatives
+(only one of them can be set). As soon as one of these parameter has been set, the
+others are no longer proposed by completion.
+
+[source,java]
+----
+/deployment=myapp:add-content(content=[{url=myurl,<TAB>
+/deployment=myapp:add-content(content=[{url=myurl,target-path
+----
+_target-path_ argument is automatically inlined in the command.
+
 [TIP]
 
-Tab-completion is supported for all commands and options, i.e.
-node-types and node-names, operation names and parameter names. We are
-also considering adding aliases that are less verbose for the user, and
+We are also considering adding aliases that are less verbose for the user, and
 will translate into the corresponding operation requests in the
 background.
 
@@ -384,6 +458,15 @@ previously recorded history);
 recorded command before the history expansion was disabled);
 * _clear_ - will clear the in-memory history (but not the file one).
 
+[[json-and-dmr-output]]
+== JSON and DMR output
+
+By default the CLI prints operation results using the DMR textual syntax. There are
+two ways to make the CLI to display JSON:
+
+* _--output-json_ option when launching the CLI.
+* _<output-json>_ XML element added to _jboss-cli.xml_ configuration file.
+
 [[batch-processing]]
 == Batch Processing
 
@@ -400,7 +483,6 @@ actually, is executed as a composite operation request.
 
 The batch mode is entered by executing command _batch_.
 
-[source,ruby]
 ----
 [standalone@localhost:9990 /] batch
 [standalone@localhost:9990 / #] /subsystem=datasources/data-source="java\:\/H2DS":enable
@@ -441,3 +523,25 @@ name=mytopic_)
 * _remove-batch-line_ (e.g. _remove-batch-line 3_)
 * _move-batch-line_ (e.g. _move-batch-line 3 1_)
 * _discard-batch_
+
+== Operators
+
+CLI has some operators that are similar to shell operators:
+
+* _>_ To redirect the output of a command/operation to a file:
+[source,java]
+----
+:read-resource > my-file.txt
+----
+
+* _>>_ To redirect the output of a command/operation and append it at the end of a file:
+[source,java]
+----
+:read-resource >> my-file.txt
+----
+
+* _|_ To redirect the output of a command/operation to the _grep_ command:
+[source,java]
+----
+:read-resource | grep undefined
+----

@@ -1,3 +1,4 @@
+[[EJB3_Reference_Guide]]
 = EJB 3 Reference Guide
 
 This chapter details the extensions that are available when developing
@@ -256,8 +257,6 @@ include::ejb3/Container_interceptors.adoc[]
 
 include::ejb3/EJB3_Clustered_Database_Timers.adoc[]
 
-include::../_admin-guide/subsystem-configuration/EJB3.adoc[]
-
 include::ejb3/EJB_IIOP_Guide.adoc[]
 
 include::ejb3/EJB_over_HTTP.adoc[]
@@ -267,5 +266,7 @@ include::ejb3/jboss-ejb3.xml_Reference.adoc[]
 include::ejb3/Message_Driven_Beans_Controlled_Delivery.adoc[]
 
 include::ejb3/Securing_EJBs.adoc[]
+
+include::ejb3/EJB_Client_Interceptors.adoc[]
 
 :leveloffset: -1

@@ -84,6 +84,7 @@ import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
 import org.jboss.msc.value.InjectedValue;
+import org.wildfly.transaction.client.ContextTransactionManager;
 
 /**
  * <p>
@@ -92,6 +93,7 @@ import org.jboss.msc.value.InjectedValue;
  *
  * @author Stuart Douglas
  * @author Wolf-Dieter Fink
+ * @author Joerg Baesner
  */
 public class DatabaseTimerPersistence implements TimerPersistence, Service<DatabaseTimerPersistence> {
 
@@ -384,7 +386,8 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
     }
 
     @Override
-    public boolean shouldRun(TimerImpl timer, TransactionManager tm) {
+    public boolean shouldRun(TimerImpl timer, @Deprecated TransactionManager ignored) {
+        final ContextTransactionManager tm = ContextTransactionManager.getInstance();
         if (!allowExecution) {
             //timers never execute on this node
             return false;
@@ -407,8 +410,9 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                     statement.setTimestamp(6, timestamp(timer.getNextExpiration()));
                 }
             } catch (SQLException e) {
-                // something wrong with the preparation
-                throw new RuntimeException(e);
+                // fix for WFLY-10130
+                EjbLogger.EJB3_TIMER_LOGGER.exceptionCheckingIfTimerShouldRun(timer, e);
+                return false;
             }
             tm.begin();
             int affected = statement.executeUpdate();
@@ -458,7 +462,7 @@ public class DatabaseTimerPersistence implements TimerPersistence, Service<Datab
                         timers.add(timerImpl);
                     } else {
                         final String deleteTimer = sql(DELETE_TIMER);
-                        try (final PreparedStatement deleteStatement = connection.prepareStatement(deleteTimer)) {
+                        try (PreparedStatement deleteStatement = connection.prepareStatement(deleteTimer)) {
                             deleteStatement.setString(1, resultSet.getString(2));
                             deleteStatement.setString(2, resultSet.getString(1));
                             deleteStatement.setString(3, partition);

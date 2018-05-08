@@ -37,7 +37,6 @@ import javax.naming.NamingException;
 import org.jboss.arquillian.container.test.api.ContainerController;
 import org.jboss.arquillian.container.test.api.Deployer;
 import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
@@ -63,22 +62,13 @@ import org.junit.runner.RunWith;
  * @author Ondrej Chaloupka
  */
 @RunWith(Arquillian.class)
-@RunAsClient
 public class RemoteStatelessFailoverTestCase {
     private static final Logger log = Logger.getLogger(RemoteStatelessFailoverTestCase.class);
     private static EJBDirectory directoryAnnotation;
     private static EJBDirectory directoryDD;
 
-    private static final String MODULE_NAME = "stateless-ejb2-failover-test";
-    private static final String MODULE_NAME_DD = "stateless-ejb2-failover-dd-test";
-
-//    private static final Integer PORT_2 = 8180;
-//    private static final String HOST_2 = TestSuiteEnvironment.getServerAddressNode1();
-//    private static final String REMOTE_PORT_PROPERTY_NAME = "remote.connection.default.port";
-//    private static final String REMOTE_HOST_PROPERTY_NAME = "remote.connection.default.host";
-
-    private static final String DEPLOYMENT_1_DD = DEPLOYMENT_1 + "-descriptor";
-    private static final String DEPLOYMENT_2_DD = DEPLOYMENT_2 + "-descriptor";
+    private static final String MODULE_NAME = RemoteStatelessFailoverTestCase.class.getSimpleName();
+    private static final String MODULE_NAME_DD = MODULE_NAME + "dd";
 
     private static final Map<String, Boolean> deployed = new HashMap<String, Boolean>();
     private static final Map<String, Boolean> started = new HashMap<String, Boolean>();
@@ -91,18 +81,18 @@ public class RemoteStatelessFailoverTestCase {
 
         deployed.put(DEPLOYMENT_1, false);
         deployed.put(DEPLOYMENT_2, false);
-        deployed.put(DEPLOYMENT_1_DD, false);
-        deployed.put(DEPLOYMENT_2_DD, false);
+        deployed.put(DEPLOYMENT_HELPER_1, false);
+        deployed.put(DEPLOYMENT_HELPER_2, false);
         started.put(NODE_1, false);
         started.put(NODE_2, false);
 
         List<String> deployments1 = new ArrayList<>();
         deployments1.add(DEPLOYMENT_1);
-        deployments1.add(DEPLOYMENT_1_DD);
+        deployments1.add(DEPLOYMENT_HELPER_1);
         container2deployment.put(NODE_1, deployments1);
         List<String> deployments2 = new ArrayList<>();
         deployments2.add(DEPLOYMENT_2);
-        deployments2.add(DEPLOYMENT_2_DD);
+        deployments2.add(DEPLOYMENT_HELPER_2);
         container2deployment.put(NODE_2, deployments2);
     }
 
@@ -129,13 +119,13 @@ public class RemoteStatelessFailoverTestCase {
         return createDeployment();
     }
 
-    @Deployment(name = DEPLOYMENT_1_DD, managed = false, testable = false)
+    @Deployment(name = DEPLOYMENT_HELPER_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
     public static Archive<?> createDeploymentOnDescriptorForContainer1() {
         return createDeploymentOnDescriptor();
     }
 
-    @Deployment(name = DEPLOYMENT_2_DD, managed = false, testable = false)
+    @Deployment(name = DEPLOYMENT_HELPER_2, managed = false, testable = false)
     @TargetsContainer(NODE_2)
     public static Archive<?> createDeploymentOnDescriptorForContainer2() {
         return createDeploymentOnDescriptor();
@@ -171,7 +161,7 @@ public class RemoteStatelessFailoverTestCase {
 
     @Test
     public void testFailoverOnStopBeanSpecifiedByDescriptor() throws Exception {
-        doFailover(true, directoryDD, DEPLOYMENT_1_DD, DEPLOYMENT_2_DD);
+        doFailover(true, directoryDD, DEPLOYMENT_HELPER_1, DEPLOYMENT_HELPER_2);
     }
 
     @Test
@@ -181,7 +171,7 @@ public class RemoteStatelessFailoverTestCase {
 
     @Test
     public void testFailoverOnUndeploySpecifiedByDescriptor() throws Exception {
-        doFailover(false, directoryDD, DEPLOYMENT_1_DD, DEPLOYMENT_2_DD);
+        doFailover(false, directoryDD, DEPLOYMENT_HELPER_1, DEPLOYMENT_HELPER_2);
     }
 
     private void doFailover(boolean isStop, EJBDirectory directory, String deployment1, String deployment2) throws Exception {
@@ -225,7 +215,7 @@ public class RemoteStatelessFailoverTestCase {
 
     @Test
     public void testLoadbalanceSpecifiedByDescriptor() throws Exception {
-        loadbalance(directoryDD, DEPLOYMENT_1_DD, DEPLOYMENT_2_DD);
+        loadbalance(directoryDD, DEPLOYMENT_HELPER_1, DEPLOYMENT_HELPER_2);
     }
 
     /**

@@ -22,9 +22,11 @@
 package org.wildfly.clustering.web.infinispan.session;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,6 +40,7 @@ import javax.servlet.http.HttpSessionEvent;
 import org.infinispan.Cache;
 import org.infinispan.context.Flag;
 import org.infinispan.distribution.DistributionManager;
+import org.infinispan.filter.KeyFilter;
 import org.infinispan.notifications.Listener;
 import org.infinispan.notifications.cachelistener.annotation.CacheEntryActivated;
 import org.infinispan.notifications.cachelistener.annotation.CacheEntryPassivated;
@@ -58,6 +61,7 @@ import org.wildfly.clustering.ee.infinispan.RetryingInvoker;
 import org.wildfly.clustering.ee.infinispan.TransactionBatch;
 import org.wildfly.clustering.group.Group;
 import org.wildfly.clustering.group.Node;
+import org.wildfly.clustering.infinispan.spi.PredicateKeyFilter;
 import org.wildfly.clustering.infinispan.spi.distribution.CacheLocality;
 import org.wildfly.clustering.infinispan.spi.distribution.Key;
 import org.wildfly.clustering.infinispan.spi.distribution.Locality;
@@ -92,7 +96,7 @@ public class InfinispanSessionManager<MV, AV, L> implements SessionManager<L, Tr
     private final Group group;
     private final NodeFactory<Address> memberFactory;
     private final Invoker invoker = new RetryingInvoker(0, 10, 100);
-    private final SessionCreationMetaDataKeyFilter filter = new SessionCreationMetaDataKeyFilter();
+    private final Predicate<Object> filter = new SessionCreationMetaDataKeyFilter();
     private final Recordable<ImmutableSession> recorder;
     private final ServletContext context;
 
@@ -120,14 +124,19 @@ public class InfinispanSessionManager<MV, AV, L> implements SessionManager<L, Tr
             this.recorder.reset();
         }
         this.identifierFactory.start();
-        this.cache.addListener(this, this.filter);
         this.expirationRegistration = this.expirationRegistrar.register(this.expirationListener);
+        KeyFilter<Object> filter = new PredicateKeyFilter<>(this.filter);
+        this.cache.addListener(this, filter);
+        this.cache.addListener(this.factory.getMetaDataFactory(), filter);
+        this.cache.addListener(this.factory.getAttributesFactory(), filter);
     }
 
     @Override
     public void stop() {
-        this.cache.removeListener(this);
         this.expirationRegistration.close();
+        this.cache.removeListener(this);
+        this.cache.removeListener(this.factory.getMetaDataFactory());
+        this.cache.removeListener(this.factory.getAttributesFactory());
         this.identifierFactory.stop();
     }
 
@@ -161,8 +170,9 @@ public class InfinispanSessionManager<MV, AV, L> implements SessionManager<L, Tr
 
     private Node locatePrimaryOwner(String sessionId) {
         DistributionManager dist = this.cache.getAdvancedCache().getDistributionManager();
-        Address address = (dist != null) ? dist.getPrimaryLocation(new Key<>(sessionId)) : null;
-        return (address != null) ? this.memberFactory.createNode(address) : this.group.getLocalMember();
+        Address address = (dist != null) ? dist.getCacheTopology().getDistribution(new Key<>(sessionId)).primary() : null;
+        Node node = (address != null) ? this.memberFactory.createNode(address) : null;
+        return (node != null) ? node : this.group.getLocalMember();
     }
 
     @Override
@@ -305,7 +315,9 @@ public class InfinispanSessionManager<MV, AV, L> implements SessionManager<L, Tr
         List<HttpSessionActivationListener> listeners = findListeners(session);
         if (!listeners.isEmpty()) {
             HttpSessionEvent event = new HttpSessionEvent(new ImmutableHttpSessionAdapter(session, this.context));
-            listeners.forEach(listener -> listener.sessionWillPassivate(event));
+            for (HttpSessionActivationListener listener : listeners) {
+                listener.sessionWillPassivate(event);
+            }
         }
     }
 
@@ -313,13 +325,22 @@ public class InfinispanSessionManager<MV, AV, L> implements SessionManager<L, Tr
         List<HttpSessionActivationListener> listeners = findListeners(session);
         if (!listeners.isEmpty()) {
             HttpSessionEvent event = new HttpSessionEvent(new ImmutableHttpSessionAdapter(session, this.context));
-            listeners.forEach(listener -> listener.sessionDidActivate(event));
+            for (HttpSessionActivationListener listener : listeners) {
+                listener.sessionDidActivate(event);
+            }
         }
     }
 
     private static List<HttpSessionActivationListener> findListeners(ImmutableSession session) {
         ImmutableSessionAttributes attributes = session.getAttributes();
-        return attributes.getAttributeNames().stream().map(name -> attributes.getAttribute(name)).filter(attribute -> attribute instanceof HttpSessionActivationListener).map(attribute -> (HttpSessionActivationListener) attribute).collect(Collectors.toList());
+        List<HttpSessionActivationListener> listeners = new ArrayList<>(attributes.getAttributeNames().size());
+        for (String name : attributes.getAttributeNames()) {
+            Object attribute = attributes.getAttribute(name);
+            if (attribute instanceof HttpSessionActivationListener) {
+                listeners.add((HttpSessionActivationListener) attribute);
+            }
+        }
+        return listeners;
     }
 
     // Session decorator that performs scheduling on close().

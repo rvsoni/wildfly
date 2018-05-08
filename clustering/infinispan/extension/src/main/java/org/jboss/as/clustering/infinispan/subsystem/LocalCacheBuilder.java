@@ -22,16 +22,17 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
-import java.util.stream.Stream;
-
 import org.infinispan.configuration.cache.CacheMode;
 import org.infinispan.configuration.cache.Configuration;
 import org.infinispan.configuration.cache.ConfigurationBuilder;
+import org.infinispan.configuration.cache.MemoryConfiguration;
 import org.infinispan.configuration.cache.PersistenceConfiguration;
+import org.infinispan.configuration.cache.StorageType;
 import org.infinispan.configuration.cache.TransactionConfiguration;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
+import org.wildfly.clustering.service.CompositeDependency;
 import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.ValueDependency;
 
@@ -40,11 +41,13 @@ import org.wildfly.clustering.service.ValueDependency;
  */
 public class LocalCacheBuilder extends CacheConfigurationBuilder {
 
+    private final ValueDependency<MemoryConfiguration> memory;
     private final ValueDependency<PersistenceConfiguration> persistence;
     private final ValueDependency<TransactionConfiguration> transaction;
 
     LocalCacheBuilder(PathAddress address) {
         super(address);
+        this.memory = new InjectedValueDependency<>(CacheComponent.MEMORY.getServiceName(address), MemoryConfiguration.class);
         this.persistence = new InjectedValueDependency<>(CacheComponent.PERSISTENCE.getServiceName(address), PersistenceConfiguration.class);
         this.transaction = new InjectedValueDependency<>(CacheComponent.TRANSACTION.getServiceName(address), TransactionConfiguration.class);
     }
@@ -52,8 +55,7 @@ public class LocalCacheBuilder extends CacheConfigurationBuilder {
     @Override
     public ServiceBuilder<Configuration> build(ServiceTarget target) {
         ServiceBuilder<Configuration> builder = super.build(target);
-        Stream.of(this.persistence, this.transaction).forEach(dependency -> dependency.register(builder));
-        return builder;
+        return new CompositeDependency(this.memory, this.persistence, this.transaction).register(builder);
     }
 
     @Override
@@ -62,10 +64,11 @@ public class LocalCacheBuilder extends CacheConfigurationBuilder {
 
         builder.clustering().cacheMode(CacheMode.LOCAL);
 
-        TransactionConfiguration transaction = this.transaction.getValue();
+        MemoryConfiguration memory = this.memory.getValue();
         PersistenceConfiguration persistence = this.persistence.getValue();
+        TransactionConfiguration transaction = this.transaction.getValue();
 
         // Auto-enable simple cache optimization if cache is non-transactional and non-persistent
-        builder.simpleCache(!transaction.transactionMode().isTransactional() && !persistence.usingStores());
+        builder.simpleCache((memory.storageType() == StorageType.OBJECT) && !transaction.transactionMode().isTransactional() && !persistence.usingStores());
     }
 }

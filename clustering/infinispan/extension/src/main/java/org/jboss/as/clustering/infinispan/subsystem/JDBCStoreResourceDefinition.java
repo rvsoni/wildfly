@@ -23,25 +23,20 @@
 package org.jboss.as.clustering.infinispan.subsystem;
 
 import java.util.Arrays;
-import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
-import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.persistence.jdbc.DatabaseType;
+import org.jboss.as.clustering.controller.AttributeTranslation;
 import org.jboss.as.clustering.controller.AttributeValueTranslator;
 import org.jboss.as.clustering.controller.CapabilityReference;
 import org.jboss.as.clustering.controller.CommonUnaryRequirement;
-import org.jboss.as.clustering.controller.ManagementResourceRegistration;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
-import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
 import org.jboss.as.clustering.controller.transform.SimpleAttributeConverter;
 import org.jboss.as.clustering.controller.transform.SimpleAttributeConverter.Converter;
 import org.jboss.as.clustering.controller.validation.EnumValidator;
 import org.jboss.as.clustering.infinispan.InfinispanLogger;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
-import org.jboss.as.controller.OperationContext;
-import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
@@ -68,14 +63,32 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
 
     static final PathElement PATH = pathElement("jdbc");
 
-    enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        DATA_SOURCE("data-source", ModelType.STRING, builder -> builder.setRequired(true).setCapabilityReference(new CapabilityReference(Capability.PERSISTENCE, CommonUnaryRequirement.DATA_SOURCE)).setAlternatives(DeprecatedAttribute.DATASOURCE.getName())),
-        DIALECT("dialect", ModelType.STRING, builder -> builder.setAllowExpression(true).setRequired(false).setValidator(new EnumValidator<>(DatabaseType.class))),
+    enum Attribute implements org.jboss.as.clustering.controller.Attribute, UnaryOperator<SimpleAttributeDefinitionBuilder> {
+        DATA_SOURCE("data-source", ModelType.STRING) {
+            @Override
+            public SimpleAttributeDefinitionBuilder apply(SimpleAttributeDefinitionBuilder builder) {
+                return builder.setRequired(true)
+                        .setCapabilityReference(new CapabilityReference(Capability.PERSISTENCE, CommonUnaryRequirement.DATA_SOURCE))
+                        .setAlternatives(DeprecatedAttribute.DATASOURCE.getName())
+                        ;
+            }
+        },
+        DIALECT("dialect", ModelType.STRING) {
+            @Override
+            public SimpleAttributeDefinitionBuilder apply(SimpleAttributeDefinitionBuilder builder) {
+                return builder.setAllowExpression(true)
+                        .setRequired(false)
+                        .setValidator(new EnumValidator<>(DatabaseType.class))
+                        ;
+            }
+        },
         ;
         private final AttributeDefinition definition;
 
-        Attribute(String name, ModelType type, UnaryOperator<SimpleAttributeDefinitionBuilder> configurator) {
-            this.definition = configurator.apply(new SimpleAttributeDefinitionBuilder(name, type).setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)).build();
+        Attribute(String name, ModelType type) {
+            this.definition = this.apply(new SimpleAttributeDefinitionBuilder(name, type)
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES))
+                    .build();
         }
 
         @Override
@@ -84,13 +97,22 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
         }
     }
 
-    enum DeprecatedAttribute implements org.jboss.as.clustering.controller.Attribute {
-        DATASOURCE("datasource", ModelType.STRING, builder -> builder.setAllowExpression(true).setRequired(false), InfinispanModel.VERSION_4_0_0), // Defines data source as JNDI name
+    enum DeprecatedAttribute implements org.jboss.as.clustering.controller.Attribute, UnaryOperator<SimpleAttributeDefinitionBuilder> {
+        // Defines data source as JNDI name
+        DATASOURCE("datasource", ModelType.STRING, InfinispanModel.VERSION_4_0_0) {
+            @Override
+            public SimpleAttributeDefinitionBuilder apply(SimpleAttributeDefinitionBuilder builder) {
+                return builder.setAllowExpression(true).setRequired(false);
+            }
+        },
         ;
         private final AttributeDefinition definition;
 
-        DeprecatedAttribute(String name, ModelType type, UnaryOperator<SimpleAttributeDefinitionBuilder> configurator, InfinispanModel deprecation) {
-            this.definition = configurator.apply(new SimpleAttributeDefinitionBuilder(name, type).setDeprecated(deprecation.getVersion()).setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)).build();
+        DeprecatedAttribute(String name, ModelType type, InfinispanModel deprecation) {
+            this.definition = this.apply(new SimpleAttributeDefinitionBuilder(name, type)
+                    .setDeprecated(deprecation.getVersion())
+                    .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES))
+                    .build();
         }
 
         @Override
@@ -106,11 +128,11 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
                     // WFLY-8985 value MARIA_DB and any expression which could potentially resolve to that value on a slave node must be rejected
                     .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, Attribute.DIALECT.getDefinition())
                     .addRejectCheck(new RejectAttributeChecker.SimpleRejectAttributeChecker(new ModelNode(DatabaseType.MARIA_DB.name())), Attribute.DIALECT.getDefinition());
-        }
 
-        if (InfinispanModel.VERSION_5_0_0.requiresTransformation(version) && !InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
-            // DATASOURCE attribute was only supported as an add operation parameter
-            builder.getAttributeBuilder().setDiscard(DiscardAttributeChecker.ALWAYS, DeprecatedAttribute.DATASOURCE.getDefinition());
+            if (!InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
+                // DATASOURCE attribute was only supported as an add operation parameter
+                builder.getAttributeBuilder().setDiscard(DiscardAttributeChecker.ALWAYS, DeprecatedAttribute.DATASOURCE.getDefinition());
+            }
         }
 
         if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
@@ -182,51 +204,71 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
         }
     }
 
-    static final AttributeValueTranslator POOL_NAME_TO_JNDI_NAME_TRANSLATOR = new AttributeValueTranslator() {
+    static final AttributeTranslation DATA_SOURCE_TRANSLATION = new AttributeTranslation() {
         @Override
-        public ModelNode translate(OperationContext context, ModelNode value) throws OperationFailedException {
-            String poolName = value.asString();
-            PathAddress address = context.getCurrentAddress();
-            PathAddress rootAddress = address.subAddress(0, address.size() - 4);
-            PathAddress subsystemAddress = rootAddress.append(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, "datasources"));
-            Resource subsystem = context.readResourceFromRoot(subsystemAddress);
-            for (String type : Arrays.asList("data-source", "xa-data-source")) {
-                Resource resource = subsystem.getChild(PathElement.pathElement(type, poolName));
-                if (resource != null) {
-                    return resource.getModel().get("jndi-name");
-                }
-            }
-            throw InfinispanLogger.ROOT_LOGGER.dataSourceNotFound(poolName);
+        public org.jboss.as.clustering.controller.Attribute getTargetAttribute() {
+            return Attribute.DATA_SOURCE;
         }
-    };
 
-    static final AttributeValueTranslator JNDI_NAME_TO_POOL_NAME_TRANSLATOR = new AttributeValueTranslator() {
         @Override
-        public ModelNode translate(OperationContext context, ModelNode value) throws OperationFailedException {
-            String jndiName = value.asString();
-            PathAddress address = context.getCurrentAddress();
-            PathAddress rootAddress = address.subAddress(0, address.size() - 4);
-            PathAddress subsystemAddress = rootAddress.append(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, "datasources"));
-            Resource subsystem = context.readResourceFromRoot(subsystemAddress);
-            for (String type : Arrays.asList("data-source", "xa-data-source")) {
-                if (subsystem.hasChildren(type)) {
-                    for (Resource.ResourceEntry entry : subsystem.getChildren(type)) {
-                        ModelNode model = entry.getModel();
-                        if (model.get("jndi-name").asString().equals(jndiName)) {
-                            return new ModelNode(entry.getName());
+        public AttributeValueTranslator getReadTranslator() {
+            return (context, value) -> {
+                String poolName = value.asString();
+                PathAddress address = context.getCurrentAddress();
+                PathAddress rootAddress = address.subAddress(0, address.size() - 4);
+                PathAddress subsystemAddress = rootAddress.append(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, "datasources"));
+                Resource subsystem = context.readResourceFromRoot(subsystemAddress);
+                for (String type : Arrays.asList("data-source", "xa-data-source")) {
+                    Resource resource = subsystem.getChild(PathElement.pathElement(type, poolName));
+                    if (resource != null) {
+                        return resource.getModel().get("jndi-name");
+                    }
+                }
+                throw InfinispanLogger.ROOT_LOGGER.dataSourceNotFound(poolName);
+            };
+        }
+
+        @Override
+        public AttributeValueTranslator getWriteTranslator() {
+            return (context, value) -> {
+                String jndiName = value.asString();
+                PathAddress address = context.getCurrentAddress();
+                PathAddress rootAddress = address.subAddress(0, address.size() - 4);
+                PathAddress subsystemAddress = rootAddress.append(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, "datasources"));
+                Resource subsystem = context.readResourceFromRoot(subsystemAddress);
+                for (String type : Arrays.asList("data-source", "xa-data-source")) {
+                    if (subsystem.hasChildren(type)) {
+                        for (Resource.ResourceEntry entry : subsystem.getChildren(type)) {
+                            ModelNode model = entry.getModel();
+                            if (model.get("jndi-name").asString().equals(jndiName)) {
+                                return new ModelNode(entry.getName());
+                            }
                         }
                     }
                 }
-            }
-            throw InfinispanLogger.ROOT_LOGGER.dataSourceJndiNameNotFound(jndiName);
+                throw InfinispanLogger.ROOT_LOGGER.dataSourceJndiNameNotFound(jndiName);
+            };
         }
     };
 
-    JDBCStoreResourceDefinition(PathElement path, PathElement legacyPath, ResourceDescriptionResolver resolver, Consumer<ResourceDescriptor> configurator, ResourceServiceBuilderFactory<PersistenceConfiguration> builderFactory, Consumer<ManagementResourceRegistration> registrationConfigurator) {
-        super(path, legacyPath, resolver, configurator.andThen(descriptor -> descriptor
-                .addAttributes(Attribute.class)
-                // Translate deprecated DATASOURCE attribute to DATA_SOURCE attribute
-                .addAttributeTranslation(DeprecatedAttribute.DATASOURCE, Attribute.DATA_SOURCE, POOL_NAME_TO_JNDI_NAME_TRANSLATOR, JNDI_NAME_TO_POOL_NAME_TRANSLATOR)
-            ), builderFactory, registrationConfigurator);
+    private static class ResourceDescriptorConfigurator implements UnaryOperator<ResourceDescriptor> {
+        private final UnaryOperator<ResourceDescriptor> configurator;
+
+        ResourceDescriptorConfigurator(UnaryOperator<ResourceDescriptor> configurator) {
+            this.configurator = configurator;
+        }
+
+        @Override
+        public ResourceDescriptor apply(ResourceDescriptor descriptor) {
+            return this.configurator.apply(descriptor)
+                    .addAttributes(Attribute.class)
+                    // Translate deprecated DATASOURCE attribute to DATA_SOURCE attribute
+                    .addAttributeTranslation(DeprecatedAttribute.DATASOURCE, DATA_SOURCE_TRANSLATION)
+                    ;
+        }
+    }
+
+    JDBCStoreResourceDefinition(PathElement path, PathElement legacyPath, ResourceDescriptionResolver resolver, UnaryOperator<ResourceDescriptor> configurator) {
+        super(path, legacyPath, resolver, new ResourceDescriptorConfigurator(configurator), JDBCStoreBuilder::new);
     }
 }

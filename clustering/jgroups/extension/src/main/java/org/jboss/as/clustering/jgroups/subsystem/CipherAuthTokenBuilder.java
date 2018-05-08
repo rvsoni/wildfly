@@ -25,10 +25,10 @@ package org.jboss.as.clustering.jgroups.subsystem;
 import static org.jboss.as.clustering.jgroups.subsystem.CipherAuthTokenResourceDefinition.Attribute.*;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyStore;
-import java.util.stream.Stream;
 
 import javax.crypto.Cipher;
 
@@ -43,6 +43,7 @@ import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.CompositeDependency;
 import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.ValueDependency;
 import org.wildfly.security.credential.PasswordCredential;
@@ -76,8 +77,7 @@ public class CipherAuthTokenBuilder extends AuthTokenBuilder<CipherAuthToken> {
     @Override
     public ServiceBuilder<CipherAuthToken> build(ServiceTarget target) {
         ServiceBuilder<CipherAuthToken> builder = super.build(target);
-        Stream.of(this.keyStore, this.keyCredentialSource).forEach(dependency -> dependency.register(builder));
-        return builder;
+        return new CompositeDependency(this.keyStore, this.keyCredentialSource).register(builder);
     }
 
     @Override
@@ -89,7 +89,7 @@ public class CipherAuthTokenBuilder extends AuthTokenBuilder<CipherAuthToken> {
                 throw JGroupsLogger.ROOT_LOGGER.keyEntryNotFound(alias);
             }
             if (!store.entryInstanceOf(alias, KeyStore.PrivateKeyEntry.class)) {
-                throw JGroupsLogger.ROOT_LOGGER.privateKeyStoreEntryExpected(alias);
+                throw JGroupsLogger.ROOT_LOGGER.unexpectedKeyStoreEntryType(alias, KeyStore.PrivateKeyEntry.class.getSimpleName());
             }
             PasswordCredential credential = this.keyCredentialSource.getValue().getCredential(PasswordCredential.class);
             if (credential == null) {
@@ -102,7 +102,7 @@ public class CipherAuthTokenBuilder extends AuthTokenBuilder<CipherAuthToken> {
             KeyStore.PrivateKeyEntry entry = (KeyStore.PrivateKeyEntry) store.getEntry(alias, new KeyStore.PasswordProtection(password.getPassword()));
             KeyPair pair = new KeyPair(entry.getCertificate().getPublicKey(), entry.getPrivateKey());
             Cipher cipher = Cipher.getInstance(this.transformation);
-            return new CipherAuthToken(cipher, pair, authValue.getBytes());
+            return new CipherAuthToken(cipher, pair, authValue.getBytes(StandardCharsets.UTF_8));
         } catch (GeneralSecurityException | IOException e) {
             throw new IllegalArgumentException(e);
         }

@@ -22,6 +22,10 @@
 
 package org.jboss.as.clustering.infinispan.subsystem;
 
+import java.util.function.UnaryOperator;
+
+import org.jboss.as.clustering.controller.ManagementResourceRegistration;
+import org.jboss.as.clustering.controller.ResourceDescriptor;
 import org.jboss.as.clustering.controller.transform.LegacyPropertyResourceTransformer;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
@@ -72,18 +76,22 @@ public class MixedKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDefi
 
         if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
             builder.setCustomResourceTransformer(new ResourceTransformer() {
+                @SuppressWarnings("deprecation")
                 @Override
                 public void transformResource(ResourceTransformationContext context, PathAddress address, Resource resource) throws OperationFailedException {
                     final ModelNode model = resource.getModel();
+                    final ModelNode maxBatchSize = model.remove(StoreResourceDefinition.Attribute.MAX_BATCH_SIZE.getName());
 
                     final ModelNode binaryTableModel = Resource.Tools.readModel(resource.removeChild(BinaryTableResourceDefinition.PATH));
                     if (binaryTableModel != null && binaryTableModel.isDefined()) {
                         model.get(DeprecatedAttribute.BINARY_TABLE.getName()).set(binaryTableModel);
+                        model.get(DeprecatedAttribute.BINARY_TABLE.getName()).get(TableResourceDefinition.DeprecatedAttribute.BATCH_SIZE.getName()).set((maxBatchSize != null) ? maxBatchSize : new ModelNode());
                     }
 
                     final ModelNode stringTableModel = Resource.Tools.readModel(resource.removeChild(StringTableResourceDefinition.PATH));
                     if (stringTableModel != null && stringTableModel.isDefined()) {
                         model.get(DeprecatedAttribute.STRING_TABLE.getName()).set(stringTableModel);
+                        model.get(DeprecatedAttribute.STRING_TABLE.getName()).get(TableResourceDefinition.DeprecatedAttribute.BATCH_SIZE.getName()).set((maxBatchSize != null) ? maxBatchSize : new ModelNode());
                     }
 
                     final ModelNode properties = model.remove(StoreResourceDefinition.Attribute.PROPERTIES.getName());
@@ -100,19 +108,31 @@ public class MixedKeyedJDBCStoreResourceDefinition extends JDBCStoreResourceDefi
         StringTableResourceDefinition.buildTransformation(version, builder);
     }
 
-    MixedKeyedJDBCStoreResourceDefinition() {
-        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, JDBCStoreResourceDefinition.PATH, WILDCARD_PATH), descriptor -> descriptor
-                .addExtraParameters(DeprecatedAttribute.class)
-                .addRequiredChildren(BinaryTableResourceDefinition.PATH, StringTableResourceDefinition.PATH)
-                // Translate deprecated BINARY_TABLE attribute into separate add table operation
-                .setAddOperationTransformation(new TableAttributeTransformation(DeprecatedAttribute.BINARY_TABLE, BinaryTableResourceDefinition.PATH).andThen(new TableAttributeTransformation(DeprecatedAttribute.STRING_TABLE, StringTableResourceDefinition.PATH)))
-            , address -> new MixedKeyedJDBCStoreBuilder(address.getParent()), registration -> {
-                registration.registerReadWriteAttribute(DeprecatedAttribute.BINARY_TABLE.getDefinition(), BinaryKeyedJDBCStoreResourceDefinition.LEGACY_READ_TABLE_HANDLER, BinaryKeyedJDBCStoreResourceDefinition.LEGACY_WRITE_TABLE_HANDLER);
-                registration.registerReadWriteAttribute(DeprecatedAttribute.STRING_TABLE.getDefinition(), StringKeyedJDBCStoreResourceDefinition.LEGACY_READ_TABLE_HANDLER, StringKeyedJDBCStoreResourceDefinition.LEGACY_WRITE_TABLE_HANDLER);
+    static class ResourceDescriptorConfigurator implements UnaryOperator<ResourceDescriptor> {
+        @Override
+        public ResourceDescriptor apply(ResourceDescriptor descriptor) {
+            return descriptor.addExtraParameters(DeprecatedAttribute.class)
+                    .addRequiredChildren(BinaryTableResourceDefinition.PATH, StringTableResourceDefinition.PATH)
+                    // Translate deprecated BINARY_TABLE and STRING_TABLE attributes into separate add table operation
+                    .setAddOperationTransformation(new TableAttributeTransformation(DeprecatedAttribute.BINARY_TABLE, BinaryTableResourceDefinition.PATH).andThen(new TableAttributeTransformation(DeprecatedAttribute.STRING_TABLE, StringTableResourceDefinition.PATH)));
+        }
+    }
 
-                new BinaryTableResourceDefinition().register(registration);
-                new StringTableResourceDefinition().register(registration);
-            });
+    MixedKeyedJDBCStoreResourceDefinition() {
+        super(PATH, LEGACY_PATH, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(PATH, JDBCStoreResourceDefinition.PATH, WILDCARD_PATH), new ResourceDescriptorConfigurator());
         this.setDeprecated(InfinispanModel.VERSION_5_0_0.getVersion());
+    }
+
+    @Override
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = super.register(parent);
+
+        registration.registerReadWriteAttribute(DeprecatedAttribute.BINARY_TABLE.getDefinition(), BinaryKeyedJDBCStoreResourceDefinition.LEGACY_READ_TABLE_HANDLER, BinaryKeyedJDBCStoreResourceDefinition.LEGACY_WRITE_TABLE_HANDLER);
+        registration.registerReadWriteAttribute(DeprecatedAttribute.STRING_TABLE.getDefinition(), StringKeyedJDBCStoreResourceDefinition.LEGACY_READ_TABLE_HANDLER, StringKeyedJDBCStoreResourceDefinition.LEGACY_WRITE_TABLE_HANDLER);
+
+        new BinaryTableResourceDefinition().register(registration);
+        new StringTableResourceDefinition().register(registration);
+
+        return registration;
     }
 }

@@ -1,3 +1,4 @@
+[[Testsuite]]
 = WildFly Testsuite
 WildFly team;
 :revnumber: {version}
@@ -8,7 +9,7 @@ WildFly team;
 :doctype: book
 :icons: font
 :source-highlighter: coderay
-:wildflyVersion: 11
+:wildflyVersion: 12
 
 :leveloffset: +1
 

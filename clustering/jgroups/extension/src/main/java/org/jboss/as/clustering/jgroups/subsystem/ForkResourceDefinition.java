@@ -29,12 +29,16 @@ import java.util.Map;
 import org.jboss.as.clustering.controller.CapabilityProvider;
 import org.jboss.as.clustering.controller.ChildResourceDefinition;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
+import org.jboss.as.clustering.controller.ResourceServiceBuilder;
 import org.jboss.as.clustering.controller.SimpleResourceRegistration;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
 import org.jboss.as.clustering.controller.UnaryRequirementCapability;
+import org.jboss.as.controller.ModelVersion;
+import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
+import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
 import org.wildfly.clustering.jgroups.spi.JGroupsRequirement;
 import org.wildfly.clustering.service.UnaryRequirement;
@@ -73,7 +77,22 @@ public class ForkResourceDefinition extends ChildResourceDefinition<ManagementRe
 
     static final Map<ClusteringRequirement, org.jboss.as.clustering.controller.Capability> CLUSTERING_CAPABILITIES = new EnumMap<>(ClusteringRequirement.class);
     static {
-        EnumSet.allOf(ClusteringRequirement.class).forEach(requirement -> CLUSTERING_CAPABILITIES.put(requirement, new UnaryRequirementCapability(requirement)));
+        for (ClusteringRequirement requirement : EnumSet.allOf(ClusteringRequirement.class)) {
+            CLUSTERING_CAPABILITIES.put(requirement, new UnaryRequirementCapability(requirement));
+        }
+    }
+
+    static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
+        ResourceTransformationDescriptionBuilder builder = parent.addChildResource(WILDCARD_PATH);
+
+        ProtocolRegistration.buildTransformation(version, builder);
+    }
+
+    static class ForkChannelFactoryBuilderFactory implements ResourceServiceBuilderFactory<ChannelFactory> {
+        @Override
+        public ResourceServiceBuilder<ChannelFactory> createBuilder(PathAddress address) {
+            return new ForkChannelFactoryBuilder(Capability.FORK_CHANNEL_FACTORY, address);
+        }
     }
 
     ForkResourceDefinition() {
@@ -81,17 +100,19 @@ public class ForkResourceDefinition extends ChildResourceDefinition<ManagementRe
     }
 
     @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = parent.registerSubModel(this);
 
         ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver())
                 .addCapabilities(Capability.class)
                 .addCapabilities(CLUSTERING_CAPABILITIES.values())
                 ;
-        ResourceServiceBuilderFactory<ChannelFactory> builderFactory = address -> new ForkChannelFactoryBuilder(Capability.FORK_CHANNEL_FACTORY, address);
+        ResourceServiceBuilderFactory<ChannelFactory> builderFactory = new ForkChannelFactoryBuilderFactory();
         ResourceServiceHandler handler = new ForkServiceHandler(builderFactory);
         new SimpleResourceRegistration(descriptor, handler).register(registration);
 
         new ProtocolRegistration(builderFactory, new ForkProtocolRuntimeResourceRegistration()).register(registration);
+
+        return registration;
     }
 }

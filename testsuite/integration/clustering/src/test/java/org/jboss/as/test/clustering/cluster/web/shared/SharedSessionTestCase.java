@@ -33,7 +33,6 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
@@ -56,22 +55,22 @@ import org.junit.runner.RunWith;
  * @author Paul Ferraro
  */
 @RunWith(Arquillian.class)
-@RunAsClient
 public class SharedSessionTestCase extends AbstractClusteringTestCase {
 
-    private static final String MODULE = "shared";
-    private static final String MODULE_1 = "war1";
-    private static final String MODULE_2 = "war2";
+    private static final String MODULE_PREFIX = SharedSessionTestCase.class.getSimpleName() + '-';
+    private static final String MODULE = MODULE_PREFIX + "shared";
+    private static final String MODULE_1 = MODULE_PREFIX + "war1";
+    private static final String MODULE_2 = MODULE_PREFIX + "war2";
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
-    public static Archive<?> deployment0() {
+    public static Archive<?> deployment1() {
         return getDeployment();
     }
 
     @Deployment(name = DEPLOYMENT_2, managed = false, testable = false)
     @TargetsContainer(NODE_2)
-    public static Archive<?> deployment1() {
+    public static Archive<?> deployment2() {
         return getDeployment();
     }
 

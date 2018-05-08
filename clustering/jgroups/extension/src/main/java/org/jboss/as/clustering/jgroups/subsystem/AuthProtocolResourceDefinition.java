@@ -22,12 +22,14 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
-import org.jboss.as.clustering.controller.CapabilityReference;
+import org.jboss.as.clustering.controller.UnaryCapabilityNameResolver;
+import org.jboss.as.clustering.controller.ResourceCapabilityReference;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
 import org.jboss.as.controller.ModelVersion;
+import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.jgroups.protocols.AUTH;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
@@ -42,15 +44,35 @@ public class AuthProtocolResourceDefinition extends ProtocolResourceDefinition<A
         ProtocolResourceDefinition.addTransformations(version, builder);
     }
 
-    AuthProtocolResourceDefinition(String name, Consumer<ResourceDescriptor> descriptorConfigurator, ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory) {
-        super(pathElement(name), descriptorConfigurator.andThen(descriptor -> descriptor
-                .setAddOperationTransformation(new LegacyAddOperationTransformation("auth_class"))
-                .setOperationTransformation(LEGACY_OPERATION_TRANSFORMER)
-                .addResourceCapabilityReference(new CapabilityReference(Capability.PROTOCOL, AuthTokenResourceDefinition.Capability.AUTH_TOKEN), address -> address.getParent().getLastElement().getValue()))
-            , address -> new AuthProtocolConfigurationBuilder(address), parentBuilderFactory, (parent, registration) -> {
-                new PlainAuthTokenResourceDefinition().register(registration);
-                new DigestAuthTokenResourceDefinition().register(registration);
-                new CipherAuthTokenResourceDefinition().register(registration);
-        });
+    private static class ResourceDescriptorConfigurator implements UnaryOperator<ResourceDescriptor> {
+        private final UnaryOperator<ResourceDescriptor> configurator;
+
+        ResourceDescriptorConfigurator(UnaryOperator<ResourceDescriptor> configurator) {
+            this.configurator = configurator;
+        }
+
+        @Override
+        public ResourceDescriptor apply(ResourceDescriptor descriptor) {
+            return this.configurator.apply(descriptor)
+                    .setAddOperationTransformation(new LegacyAddOperationTransformation("auth_class"))
+                    .setOperationTransformation(LEGACY_OPERATION_TRANSFORMER)
+                    .addResourceCapabilityReference(new ResourceCapabilityReference(Capability.PROTOCOL, AuthTokenResourceDefinition.Capability.AUTH_TOKEN, UnaryCapabilityNameResolver.PARENT))
+                    ;
+        }
+    }
+
+    AuthProtocolResourceDefinition(String name, UnaryOperator<ResourceDescriptor> configurator, ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory) {
+        super(pathElement(name), new ResourceDescriptorConfigurator(configurator), AuthProtocolConfigurationBuilder::new, parentBuilderFactory);
+    }
+
+    @Override
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = super.register(parent);
+
+        new PlainAuthTokenResourceDefinition().register(registration);
+        new DigestAuthTokenResourceDefinition().register(registration);
+        new CipherAuthTokenResourceDefinition().register(registration);
+
+        return registration;
     }
 }

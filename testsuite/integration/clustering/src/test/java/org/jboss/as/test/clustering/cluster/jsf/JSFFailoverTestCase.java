@@ -22,8 +22,6 @@
 package org.jboss.as.test.clustering.cluster.jsf;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.LinkedList;
 import java.util.List;
@@ -47,7 +45,6 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.OperateOnDeployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
@@ -68,23 +65,24 @@ import org.junit.runner.RunWith;
  * @author Stuart Douglas
  */
 @RunWith(Arquillian.class)
-@RunAsClient
 public class JSFFailoverTestCase extends AbstractClusteringTestCase {
+
+    private static final String MODULE_NAME = JSFFailoverTestCase.class.getSimpleName();
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
-    public static Archive<?> deployment0() {
+    public static Archive<?> deployment1() {
         return createDeployment();
     }
 
     @Deployment(name = DEPLOYMENT_2, managed = false, testable = false)
     @TargetsContainer(NODE_2)
-    public static Archive<?> deployment1() {
+    public static Archive<?> deployment2() {
         return createDeployment();
     }
 
     private static Archive<?> createDeployment() {
-        WebArchive war = ShrinkWrap.create(WebArchive.class, "numberguess-jsf.war");
+        WebArchive war = ShrinkWrap.create(WebArchive.class, MODULE_NAME + ".war");
         war.addClasses(Game.class, Generator.class, MaxNumber.class, Random.class);
         war.setWebXML(DistributableTestCase.class.getPackage(), "web.xml");
         war.addAsWebResource(JSFFailoverTestCase.class.getPackage(), "home.xhtml", "home.xhtml");
@@ -95,12 +93,6 @@ public class JSFFailoverTestCase extends AbstractClusteringTestCase {
 
     /**
      * Parses the response page and headers for a cookie, JSF view state and the numberguess game status.
-     *
-     * @param response
-     * @param sessionId
-     * @return
-     * @throws IllegalStateException
-     * @throws IOException
      */
     private static NumberGuessState parseState(HttpResponse response, String sessionId) throws IllegalStateException, IOException {
         Pattern smallestPattern = Pattern.compile("<span id=\"numberGuess:smallest\">([^<]+)</span>");
@@ -141,15 +133,8 @@ public class JSFFailoverTestCase extends AbstractClusteringTestCase {
 
     /**
      * Creates an HTTP POST request with a number guess.
-     *
-     * @param url
-     * @param sessionId
-     * @param viewState
-     * @param guess
-     * @return
-     * @throws UnsupportedEncodingException
      */
-    private static HttpUriRequest buildPostRequest(String url, String sessionId, String viewState, String guess) throws UnsupportedEncodingException {
+    private static HttpUriRequest buildPostRequest(String url, String sessionId, String viewState, String guess) {
         HttpPost post = new HttpPost(url);
 
         List<NameValuePair> list = new LinkedList<>();
@@ -169,10 +154,6 @@ public class JSFFailoverTestCase extends AbstractClusteringTestCase {
 
     /**
      * Creates an HTTP GET request, with a potential JSESSIONID cookie.
-     *
-     * @param url
-     * @param sessionId
-     * @return
      */
     private static HttpUriRequest buildGetRequest(String url, String sessionId) {
         HttpGet request = new HttpGet(url);
@@ -192,16 +173,12 @@ public class JSFFailoverTestCase extends AbstractClusteringTestCase {
      * 4/ Query second container verifying sessions got replicated.
      * 5/ Bring up the first container.
      * 6/ Query first container verifying that updated sessions replicated back.
-     *
-     * @throws java.io.IOException
-     * @throws InterruptedException
-     * @throws URISyntaxException
      */
     @Test
     public void testGracefulSimpleFailover(
             @ArquillianResource() @OperateOnDeployment(DEPLOYMENT_1) URL baseURL1,
             @ArquillianResource() @OperateOnDeployment(DEPLOYMENT_2) URL baseURL2)
-            throws IOException, InterruptedException, URISyntaxException {
+            throws IOException {
 
         String url1 = baseURL1.toString() + "home.jsf";
         String url2 = baseURL2.toString() + "home.jsf";
@@ -318,16 +295,12 @@ public class JSFFailoverTestCase extends AbstractClusteringTestCase {
      * 4/ Query second container verifying sessions got replicated.
      * 5/ Redeploy application to the first container.
      * 6/ Query first container verifying that updated sessions replicated back.
-     *
-     * @throws java.io.IOException
-     * @throws InterruptedException
-     * @throws URISyntaxException
      */
     @Test
     public void testGracefulUndeployFailover(
             @ArquillianResource() @OperateOnDeployment(DEPLOYMENT_1) URL baseURL1,
             @ArquillianResource() @OperateOnDeployment(DEPLOYMENT_2) URL baseURL2)
-            throws IOException, InterruptedException, URISyntaxException {
+            throws IOException {
 
         String url1 = baseURL1.toString() + "home.jsf";
         String url2 = baseURL2.toString() + "home.jsf";
@@ -430,8 +403,6 @@ public class JSFFailoverTestCase extends AbstractClusteringTestCase {
             Assert.assertEquals("3", state.smallest);
             Assert.assertEquals("49", state.biggest);
         }
-
-        // Assert.fail("Show me the logs please!");
     }
 
     /**

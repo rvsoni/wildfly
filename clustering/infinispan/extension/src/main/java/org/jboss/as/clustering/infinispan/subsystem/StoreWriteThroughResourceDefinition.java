@@ -38,8 +38,10 @@ public class StoreWriteThroughResourceDefinition extends StoreWriteResourceDefin
 
     static final PathElement PATH = pathElement("through");
 
-    static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder builder) {
-        // Do nothing
+    static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
+        if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
+            parent.discardChildResource(StoreWriteThroughResourceDefinition.PATH);
+        }
     }
 
     StoreWriteThroughResourceDefinition() {
@@ -47,11 +49,13 @@ public class StoreWriteThroughResourceDefinition extends StoreWriteResourceDefin
     }
 
     @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = parent.registerSubModel(this);
 
         ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver());
-        ResourceServiceHandler handler = new SimpleResourceServiceHandler<>(address -> new StoreWriteThroughBuilder(address.getParent().getParent()));
+        ResourceServiceHandler handler = new SimpleResourceServiceHandler<>(StoreWriteThroughBuilder::new);
         new SimpleResourceRegistration(descriptor, handler).register(registration);
+
+        return registration;
     }
 }

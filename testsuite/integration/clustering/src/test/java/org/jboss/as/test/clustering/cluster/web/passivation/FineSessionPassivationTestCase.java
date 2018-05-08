@@ -22,7 +22,6 @@
 package org.jboss.as.test.clustering.cluster.web.passivation;
 
 import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.shrinkwrap.api.Archive;
@@ -30,8 +29,9 @@ import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.junit.runner.RunWith;
 
 @RunWith(Arquillian.class)
-@RunAsClient
 public class FineSessionPassivationTestCase extends SessionPassivationTestCase {
+
+    private static final String MODULE_NAME = FineSessionPassivationTestCase.class.getSimpleName();
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
@@ -46,6 +46,6 @@ public class FineSessionPassivationTestCase extends SessionPassivationTestCase {
     }
 
     static WebArchive getDeployment() {
-        return getBaseDeployment().addAsWebInfResource(SessionPassivationTestCase.class.getPackage(), "jboss-web-fine.xml", "jboss-web.xml");
+        return getBaseDeployment(MODULE_NAME).addAsWebInfResource(SessionPassivationTestCase.class.getPackage(), "jboss-web-fine.xml", "jboss-web.xml");
     }
 }

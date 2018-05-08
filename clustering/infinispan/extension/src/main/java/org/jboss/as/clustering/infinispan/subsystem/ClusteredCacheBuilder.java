@@ -24,12 +24,11 @@ package org.jboss.as.clustering.infinispan.subsystem;
 
 import static org.jboss.as.clustering.infinispan.subsystem.ClusteredCacheResourceDefinition.Attribute.*;
 
+import java.util.concurrent.TimeUnit;
+
 import org.infinispan.configuration.cache.CacheMode;
-import org.infinispan.configuration.cache.ClusteringConfiguration;
-import org.infinispan.configuration.cache.ClusteringConfigurationBuilder;
 import org.infinispan.configuration.cache.Configuration;
 import org.infinispan.configuration.cache.ConfigurationBuilder;
-import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
@@ -44,31 +43,25 @@ public class ClusteredCacheBuilder extends CacheConfigurationBuilder {
 
     private final CacheMode mode;
 
-    private volatile ClusteringConfiguration clustering;
+    private volatile long remoteTimeout;
 
     ClusteredCacheBuilder(PathAddress address, CacheMode mode) {
         super(address);
-        this.mode = mode;
+        this.mode = mode.toSync();
     }
 
     @Override
     public Builder<Configuration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        Mode mode = ModelNodes.asEnum(MODE.resolveModelAttribute(context, model), Mode.class);
-        ClusteringConfigurationBuilder builder = new ConfigurationBuilder().clustering().cacheMode(mode.apply(this.mode));
-
-        if (mode.isSynchronous()) {
-            builder.sync().replTimeout(REMOTE_TIMEOUT.resolveModelAttribute(context, model).asLong());
-        } else {
-            builder.async();
-        }
-        this.clustering = builder.create();
-
+        this.remoteTimeout = REMOTE_TIMEOUT.resolveModelAttribute(context, model).asLong();
         return super.configure(context, model);
     }
 
     @Override
     public void accept(ConfigurationBuilder builder) {
-        builder.clustering().read(this.clustering);
+        builder.clustering()
+                .cacheMode(this.mode)
+                .remoteTimeout(this.remoteTimeout, TimeUnit.MILLISECONDS)
+                ;
         super.accept(builder);
     }
 }

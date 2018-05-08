@@ -25,12 +25,16 @@ package org.jboss.as.clustering.infinispan.subsystem;
 import static org.jboss.as.clustering.infinispan.subsystem.JDBCStoreResourceDefinition.Attribute.DATA_SOURCE;
 import static org.jboss.as.clustering.infinispan.subsystem.JDBCStoreResourceDefinition.Attribute.DIALECT;
 
+import java.util.ServiceLoader;
+
 import javax.sql.DataSource;
 
 import org.infinispan.configuration.cache.PersistenceConfiguration;
 import org.infinispan.persistence.jdbc.DatabaseType;
-import org.infinispan.persistence.jdbc.configuration.AbstractJdbcStoreConfiguration;
-import org.infinispan.persistence.jdbc.configuration.AbstractJdbcStoreConfigurationBuilder;
+import org.infinispan.persistence.jdbc.configuration.JdbcStringBasedStoreConfiguration;
+import org.infinispan.persistence.jdbc.configuration.JdbcStringBasedStoreConfigurationBuilder;
+import org.infinispan.persistence.jdbc.configuration.TableManipulationConfiguration;
+import org.infinispan.persistence.keymappers.TwoWayKey2StringMapper;
 import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.clustering.infinispan.DataSourceConnectionFactoryConfigurationBuilder;
@@ -38,27 +42,36 @@ import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.dmr.ModelNode;
+import org.jboss.modules.Module;
 import org.jboss.msc.service.ServiceBuilder;
 import org.jboss.msc.service.ServiceTarget;
 import org.wildfly.clustering.service.Builder;
+import org.wildfly.clustering.service.CompositeDependency;
 import org.wildfly.clustering.service.InjectedValueDependency;
 import org.wildfly.clustering.service.ValueDependency;
 
 /**
  * @author Paul Ferraro
  */
-public abstract class JDBCStoreBuilder<C extends AbstractJdbcStoreConfiguration, B extends AbstractJdbcStoreConfigurationBuilder<C, B>> extends StoreBuilder<C, B> {
+public class JDBCStoreBuilder extends StoreBuilder<JdbcStringBasedStoreConfiguration, JdbcStringBasedStoreConfigurationBuilder> {
 
+    private final ValueDependency<TableManipulationConfiguration> table;
+    private volatile ValueDependency<Module> module;
     private volatile ValueDependency<DataSource> dataSource;
     private volatile DatabaseType dialect;
 
-    JDBCStoreBuilder(PathAddress cacheAddress, Class<B> builderClass) {
-        super(cacheAddress, builderClass);
+    JDBCStoreBuilder(PathAddress address) {
+        super(address, JdbcStringBasedStoreConfigurationBuilder.class);
+        PathAddress cacheAddress = address.getParent();
+        PathAddress containerAddress = cacheAddress.getParent();
+        this.table = new InjectedValueDependency<>(CacheComponent.STRING_TABLE.getServiceName(cacheAddress), TableManipulationConfiguration.class);
+        this.module = new InjectedValueDependency<>(CacheContainerComponent.MODULE.getServiceName(containerAddress), Module.class);
     }
 
     @Override
     public ServiceBuilder<PersistenceConfiguration> build(ServiceTarget target) {
-        return this.dataSource.register(super.build(target));
+        ServiceBuilder<PersistenceConfiguration> builder = super.build(target);
+        return new CompositeDependency(this.table, this.module, this.dataSource).register(builder);
     }
 
     @Override
@@ -70,7 +83,12 @@ public abstract class JDBCStoreBuilder<C extends AbstractJdbcStoreConfiguration,
     }
 
     @Override
-    public void accept(B builder) {
+    public void accept(JdbcStringBasedStoreConfigurationBuilder builder) {
+        builder.table().read(this.table.getValue());
+        for (TwoWayKey2StringMapper mapper : ServiceLoader.load(TwoWayKey2StringMapper.class, this.module.getValue().getClassLoader())) {
+            builder.key2StringMapper(mapper.getClass());
+            break;
+        }
         builder.dialect(this.dialect).connectionFactory(DataSourceConnectionFactoryConfigurationBuilder.class).setDataSourceDependency(this.dataSource);
     }
 }

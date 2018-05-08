@@ -70,6 +70,8 @@ public class BinaryTableResourceDefinition extends TableResourceDefinition {
     static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
         ResourceTransformationDescriptionBuilder builder = parent.addChildResource(PATH);
 
+        TableResourceDefinition.buildTransformation(version, builder);
+
         if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
             OperationTransformer addTransformer = new OperationTransformer() {
                 @Override
@@ -101,7 +103,7 @@ public class BinaryTableResourceDefinition extends TableResourceDefinition {
     }
 
     BinaryTableResourceDefinition() {
-        super(PATH, descriptor -> descriptor.addAttributes(Attribute.class), address -> new BinaryTableBuilder(address.getParent().getParent()));
+        super(PATH, Attribute.PREFIX);
         this.setDeprecated(InfinispanModel.VERSION_5_0_0.getVersion());
     }
 }

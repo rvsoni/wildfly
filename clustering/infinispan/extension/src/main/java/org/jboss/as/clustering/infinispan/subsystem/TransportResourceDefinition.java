@@ -25,21 +25,17 @@ package org.jboss.as.clustering.infinispan.subsystem;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
 
 import org.jboss.as.clustering.controller.ChildResourceDefinition;
-import org.jboss.as.clustering.controller.Registration;
+import org.jboss.as.clustering.controller.UnaryCapabilityNameResolver;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
 import org.jboss.as.clustering.controller.SimpleResourceRegistration;
 import org.jboss.as.clustering.controller.UnaryRequirementCapability;
-import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
-import org.jboss.as.controller.capability.RuntimeCapability;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.msc.service.ServiceName;
 import org.wildfly.clustering.spi.ClusteringRequirement;
-import org.wildfly.clustering.spi.ServiceNameRegistry;
 
 /**
  * @author Paul Ferraro
@@ -53,43 +49,29 @@ public abstract class TransportResourceDefinition extends ChildResourceDefinitio
 
     static final Map<ClusteringRequirement, org.jboss.as.clustering.controller.Capability> CLUSTERING_CAPABILITIES = new EnumMap<>(ClusteringRequirement.class);
     static {
-        EnumSet.allOf(ClusteringRequirement.class).forEach(requirement -> CLUSTERING_CAPABILITIES.put(requirement, new UnaryRequirementCapability(requirement) {
-            @Override
-            public RuntimeCapability<?> resolve(PathAddress address) {
-                return super.resolve(address.getParent());
-            }
-        }));
-    }
-
-    static class CapabilityServiceNameRegistry implements ServiceNameRegistry<ClusteringRequirement> {
-        private PathAddress address;
-
-        CapabilityServiceNameRegistry(PathAddress address) {
-            this.address = address;
-        }
-
-        @Override
-        public ServiceName getServiceName(ClusteringRequirement requirement) {
-            return CLUSTERING_CAPABILITIES.get(requirement).getServiceName(this.address);
+        for (ClusteringRequirement requirement : EnumSet.allOf(ClusteringRequirement.class)) {
+            CLUSTERING_CAPABILITIES.put(requirement, new UnaryRequirementCapability(requirement, UnaryCapabilityNameResolver.PARENT));
         }
     }
 
-    private final Registration<ManagementResourceRegistration> registrar;
+    private final UnaryOperator<ResourceDescriptor> configurator;
+    private final ResourceServiceHandler handler;
 
-    TransportResourceDefinition(PathElement path, Consumer<ResourceDescriptor> configurator, ResourceServiceHandler handler) {
+    TransportResourceDefinition(PathElement path, UnaryOperator<ResourceDescriptor> configurator, ResourceServiceHandler handler) {
         super(path, InfinispanExtension.SUBSYSTEM_RESOLVER.createChildResolver(path));
-
-        ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver())
-                .addCapabilities(CLUSTERING_CAPABILITIES.values())
-                ;
-        configurator.accept(descriptor);
-        this.registrar = new SimpleResourceRegistration(descriptor, handler);
+        this.configurator = configurator;
+        this.handler = handler;
     }
 
     @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = parent.registerSubModel(this);
 
-        this.registrar.register(registration);
+        ResourceDescriptor descriptor = this.configurator.apply(new ResourceDescriptor(this.getResourceDescriptionResolver()))
+                .addCapabilities(CLUSTERING_CAPABILITIES.values())
+                ;
+        new SimpleResourceRegistration(descriptor, this.handler).register(registration);
+
+        return registration;
     }
 }

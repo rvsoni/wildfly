@@ -1,3 +1,4 @@
+[[The_HTTP_management_API]]
 = The HTTP management API
 
 [[introduction]]
@@ -10,12 +11,11 @@ Even if you haven't used a curl command line you might already have used
 this channel since it is how the web console interact with the
 Management API.
 
-WildFly 9 is distributed secured by default, the default security
+WildFly is distributed secured by default, the default security
 mechanism is _username / password_ based making use of *HTTP Digest* for
 the authentication process.
 
-Thus *you need to create a user* with the
-link:add-user_utility.html[add-user.sh] script.
+Thus *you need to create a user* with the add-user.sh script.
 
 [[interacting-with-the-model]]
 == Interacting with the model

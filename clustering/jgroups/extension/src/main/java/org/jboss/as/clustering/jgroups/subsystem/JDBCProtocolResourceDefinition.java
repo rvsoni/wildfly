@@ -22,36 +22,39 @@
 
 package org.jboss.as.clustering.jgroups.subsystem;
 
-import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 import org.jboss.as.clustering.controller.CapabilityReference;
 import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.controller.ResourceDescriptor;
 import org.jboss.as.clustering.controller.ResourceServiceBuilderFactory;
-import org.jboss.as.clustering.jgroups.protocol.JDBCProtocol;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
 import org.jboss.as.controller.registry.AttributeAccess;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.jboss.dmr.ModelType;
-import org.jgroups.stack.Protocol;
+import org.jgroups.protocols.JDBC_PING;
 import org.wildfly.clustering.jgroups.spi.ChannelFactory;
 
 /**
  * Resource definition override for protocols that require a JDBC DataSource.
  * @author Paul Ferraro
  */
-public class JDBCProtocolResourceDefinition<P extends Protocol & JDBCProtocol> extends ProtocolResourceDefinition<P> {
+public class JDBCProtocolResourceDefinition extends ProtocolResourceDefinition<JDBC_PING> {
 
-    enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        DATA_SOURCE("data-source", ModelType.STRING, builder -> builder.setCapabilityReference(new CapabilityReference(Capability.PROTOCOL, CommonUnaryRequirement.DATA_SOURCE))),
+    enum Attribute implements org.jboss.as.clustering.controller.Attribute, UnaryOperator<SimpleAttributeDefinitionBuilder> {
+        DATA_SOURCE("data-source", ModelType.STRING) {
+            @Override
+            public SimpleAttributeDefinitionBuilder apply(SimpleAttributeDefinitionBuilder builder) {
+                return builder.setCapabilityReference(new CapabilityReference(Capability.PROTOCOL, CommonUnaryRequirement.DATA_SOURCE));
+            }
+        },
         ;
         private final AttributeDefinition definition;
 
-        Attribute(String name, ModelType type, UnaryOperator<SimpleAttributeDefinitionBuilder> configurator) {
-            this.definition = configurator.apply(new SimpleAttributeDefinitionBuilder(name, type)
+        Attribute(String name, ModelType type) {
+            this.definition = this.apply(new SimpleAttributeDefinitionBuilder(name, type)
                     .setAllowExpression(false)
                     .setRequired(true)
                     .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
@@ -69,11 +72,24 @@ public class JDBCProtocolResourceDefinition<P extends Protocol & JDBCProtocol> e
         ProtocolResourceDefinition.addTransformations(version, builder);
     }
 
-    JDBCProtocolResourceDefinition(String name, Consumer<ResourceDescriptor> descriptorConfigurator, ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory) {
-        super(pathElement(name), descriptorConfigurator.andThen(descriptor -> descriptor
-                .addAttributes(Attribute.class)
-                .setAddOperationTransformation(new LegacyAddOperationTransformation(Attribute.class))
-                .setOperationTransformation(LEGACY_OPERATION_TRANSFORMER)
-                ), address -> new JDBCProtocolConfigurationBuilder<>(address), parentBuilderFactory);
+    private static final class ResourceDescriptorConfigurator implements UnaryOperator<ResourceDescriptor> {
+        private final UnaryOperator<ResourceDescriptor> configurator;
+
+        ResourceDescriptorConfigurator(UnaryOperator<ResourceDescriptor> configurator) {
+            this.configurator = configurator;
+        }
+
+        @Override
+        public ResourceDescriptor apply(ResourceDescriptor descriptor) {
+            return this.configurator.apply(descriptor)
+                    .addAttributes(Attribute.class)
+                    .setAddOperationTransformation(new LegacyAddOperationTransformation(Attribute.class))
+                    .setOperationTransformation(LEGACY_OPERATION_TRANSFORMER)
+                    ;
+        }
+    }
+
+    JDBCProtocolResourceDefinition(String name, UnaryOperator<ResourceDescriptor> configurator, ResourceServiceBuilderFactory<ChannelFactory> parentBuilderFactory) {
+        super(pathElement(name), new ResourceDescriptorConfigurator(configurator), JDBCProtocolConfigurationBuilder::new, parentBuilderFactory);
     }
 }

@@ -1,3 +1,4 @@
+[[WS-Trust_and_STS]]
 = WS-Trust and STS
 
 [[ws-trust-overview]]
@@ -112,7 +113,6 @@ proving the ws-requester has successfully authenticated with the STS.
 7.  The ws-provider executes the requested service and returns the
 results to the the ws-requester.
 
-[[web-service-provider]]
 === Web service provider
 
 This section examines the crucial elements in providing endpoint
@@ -125,7 +125,6 @@ scenario. The components that will be discussed are.
 * Crypto properties and keystore files
 * MANIFEST.MF
 
-[[web-service-provider-wsdl]]
 ==== Web service provider WSDL
 
 The web service provider is a contract-first endpoint. All the WS-trust
@@ -377,7 +376,6 @@ listing below.
 </definitions>
 ----
 
-[[web-service-provider-interface]]
 ==== Web service provider Interface
 
 The web service provider interface class, ServiceIface, is a simple
@@ -978,7 +976,7 @@ message exchange via SOAP envelopes.
 As was done in the ServiceImpl class, the WSS4J annotations
 EndpointProperties and EndpointProperty are providing endpoint
 configuration for the CXF runtime. This was previous described
-link:#src-557272_WS-TrustandSTS-WebserviceproviderImplementation[here].
+<<web-service-provider-implementation,here>>.
 
 The InInterceptors annotation is used to specify a JBossWS integration
 interceptor to be used for authenticating incoming requests; JAAS

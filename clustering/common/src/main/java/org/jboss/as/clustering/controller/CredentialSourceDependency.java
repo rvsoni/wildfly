@@ -22,11 +22,10 @@
 
 package org.jboss.as.clustering.controller;
 
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.stream.Stream;
 
 import org.jboss.as.controller.ObjectTypeAttributeDefinition;
 import org.jboss.as.controller.OperationContext;
@@ -34,12 +33,9 @@ import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.security.CredentialReference;
 import org.jboss.dmr.ModelNode;
 import org.jboss.msc.inject.Injector;
+import org.jboss.msc.service.DelegatingServiceBuilder;
 import org.jboss.msc.service.ServiceBuilder;
-import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceName;
-import org.jboss.msc.service.ServiceRegistryException;
-import org.jboss.msc.service.StabilityMonitor;
-import org.jboss.msc.value.Value;
 import org.wildfly.clustering.service.Dependency;
 import org.wildfly.clustering.service.InjectorDependency;
 import org.wildfly.clustering.service.SimpleDependency;
@@ -63,7 +59,9 @@ public class CredentialSourceDependency implements ValueDependency<CredentialSou
 
     @Override
     public <T> ServiceBuilder<T> register(ServiceBuilder<T> builder) {
-        this.dependencies.forEach(dependency -> dependency.register(builder));
+        for (Dependency dependency : this.dependencies) {
+            dependency.register(builder);
+        }
         return builder;
     }
 
@@ -76,30 +74,30 @@ public class CredentialSourceDependency implements ValueDependency<CredentialSou
         }
     }
 
-    static class DependencyCollectingServiceBuilder implements ServiceBuilder<Object>, Iterable<Dependency> {
+    static class DependencyCollectingServiceBuilder extends DelegatingServiceBuilder<Object> implements Iterable<Dependency> {
         private final List<Dependency> dependencies = new LinkedList<>();
+
+        DependencyCollectingServiceBuilder() {
+            super(null);
+        }
+
+        protected ServiceBuilder getDelegate() {
+            throw new IllegalStateException();
+        }
 
         @Override
         public Iterator<Dependency> iterator() {
             return this.dependencies.iterator();
         }
 
-        @Override
-        public ServiceBuilder<Object> addAliases(ServiceName... aliases) {
-            throw new IllegalStateException();
-        }
-
-        @Override
-        public ServiceBuilder<Object> setInitialMode(ServiceController.Mode mode) {
-            throw new IllegalStateException();
-        }
-
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependencies(ServiceName... serviceNames) {
-            Stream.of(serviceNames).forEach(serviceName -> this.dependencies.add(new SimpleDependency(serviceName)));
+            this.addDependencies(Arrays.asList(serviceNames));
             return this;
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependencies(ServiceBuilder.DependencyType dependencyType, ServiceName... serviceNames) {
             if (dependencyType != ServiceBuilder.DependencyType.REQUIRED) {
@@ -108,12 +106,16 @@ public class CredentialSourceDependency implements ValueDependency<CredentialSou
             return this.addDependencies(serviceNames);
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependencies(Iterable<ServiceName> serviceNames) {
-            serviceNames.forEach(serviceName -> this.dependencies.add(new SimpleDependency(serviceName)));
+            for (ServiceName serviceName : serviceNames) {
+                this.dependencies.add(new SimpleDependency(serviceName));
+            }
             return this;
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependencies(ServiceBuilder.DependencyType dependencyType, Iterable<ServiceName> serviceNames) {
             if (dependencyType != ServiceBuilder.DependencyType.REQUIRED) {
@@ -122,12 +124,14 @@ public class CredentialSourceDependency implements ValueDependency<CredentialSou
             return this.addDependencies(serviceNames);
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependency(ServiceName serviceName) {
             this.dependencies.add(new SimpleDependency(serviceName));
             return this;
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependency(ServiceBuilder.DependencyType dependencyType, ServiceName serviceName) {
             if (dependencyType != ServiceBuilder.DependencyType.REQUIRED) {
@@ -136,76 +140,32 @@ public class CredentialSourceDependency implements ValueDependency<CredentialSou
             return this.addDependency(serviceName);
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependency(ServiceName serviceName, Injector<Object> target) {
             return this.addDependency(serviceName, Object.class, target);
         }
 
+        @Deprecated
         @Override
         public ServiceBuilder<Object> addDependency(ServiceBuilder.DependencyType dependencyType, ServiceName serviceName, Injector<Object> target) {
             return this.addDependency(dependencyType, serviceName, Object.class, target);
         }
 
+        @Deprecated
         @Override
         public <I> ServiceBuilder<Object> addDependency(ServiceName serviceName, Class<I> type, Injector<I> target) {
             this.dependencies.add(new InjectorDependency<>(serviceName, type, target));
             return this;
         }
 
+        @Deprecated
         @Override
         public <I> ServiceBuilder<Object> addDependency(ServiceBuilder.DependencyType dependencyType, ServiceName serviceName, Class<I> type, Injector<I> target) {
             if (dependencyType != ServiceBuilder.DependencyType.REQUIRED) {
                 throw new UnsupportedOperationException();
             }
             return this.addDependency(serviceName, type, target);
-        }
-
-        @Override
-        public <I> ServiceBuilder<Object> addInjection(Injector<? super I> target, I value) {
-            throw new IllegalStateException();
-        }
-
-        @Override
-        public <I> ServiceBuilder<Object> addInjectionValue(Injector<? super I> target, Value<I> value) {
-            throw new IllegalStateException();
-        }
-
-        @Override
-        public ServiceBuilder<Object> addInjection(Injector<? super Object> target) {
-            throw new IllegalStateException();
-        }
-
-        @Override
-        public ServiceBuilder<Object> addMonitor(StabilityMonitor monitor) {
-            throw new IllegalStateException();
-        }
-
-        @Override
-        public ServiceBuilder<Object> addMonitors(StabilityMonitor... monitors) {
-            throw new IllegalStateException();
-        }
-
-        @Deprecated
-        @Override
-        public ServiceBuilder<Object> addListener(org.jboss.msc.service.ServiceListener<? super Object> listener) {
-            throw new IllegalStateException();
-        }
-
-        @Deprecated
-        @Override
-        public ServiceBuilder<Object> addListener(@SuppressWarnings("unchecked") org.jboss.msc.service.ServiceListener<? super Object>... listeners) {
-            throw new IllegalStateException();
-        }
-
-        @Deprecated
-        @Override
-        public ServiceBuilder<Object> addListener(Collection<? extends org.jboss.msc.service.ServiceListener<? super Object>> listeners) {
-            throw new IllegalStateException();
-        }
-
-        @Override
-        public ServiceController<Object> install() throws ServiceRegistryException, IllegalStateException {
-            throw new IllegalStateException();
         }
     }
 }

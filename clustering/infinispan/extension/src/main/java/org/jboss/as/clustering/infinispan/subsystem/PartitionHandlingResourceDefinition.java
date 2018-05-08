@@ -75,11 +75,11 @@ public class PartitionHandlingResourceDefinition extends ComponentResourceDefini
     }
 
     @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = parent.registerSubModel(this);
 
         ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver()).addAttributes(Attribute.class);
-        ResourceServiceHandler handler = new SimpleResourceServiceHandler<>(address -> new PartitionHandlingBuilder(address.getParent()));
+        ResourceServiceHandler handler = new SimpleResourceServiceHandler<>(PartitionHandlingBuilder::new);
         new SimpleResourceRegistration(descriptor, handler).register(registration);
 
         if (registration.isRuntimeOnlyRegistrationValid()) {
@@ -87,5 +87,7 @@ public class PartitionHandlingResourceDefinition extends ComponentResourceDefini
 
             new MetricHandler<>(new PartitionHandlingMetricExecutor(), PartitionHandlingMetric.class).register(registration);
         }
+
+        return registration;
     }
 }

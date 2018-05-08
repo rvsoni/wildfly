@@ -29,7 +29,6 @@ import java.util.PropertyPermission;
 import javax.ejb.EJBException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
-import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.container.test.api.TargetsContainer;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.test.clustering.cluster.AbstractClusteringTestCase;
@@ -52,9 +51,8 @@ import org.junit.runner.RunWith;
  * @author Radoslav Husar
  */
 @RunWith(Arquillian.class)
-@RunAsClient
 public class ClientExceptionRemoteEJBTestCase extends AbstractClusteringTestCase {
-    private static final String MODULE_NAME = "client-exception-remote-ejb-test";
+    private static final String MODULE_NAME = ClientExceptionRemoteEJBTestCase.class.getSimpleName();
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)

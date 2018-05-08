@@ -38,6 +38,8 @@ import org.jboss.as.weld.util.ServiceLoaders;
 import org.jboss.modules.DependencySpec;
 import org.jboss.modules.Module;
 import org.jboss.modules.ModuleDependencySpec;
+import org.jboss.modules.ModuleLoadException;
+import org.jboss.modules.ModuleLoader;
 import org.jboss.weld.bootstrap.api.Service;
 import org.jboss.weld.bootstrap.api.ServiceRegistry;
 import org.jboss.weld.bootstrap.api.helpers.SimpleServiceRegistry;
@@ -63,6 +65,8 @@ public class BeanDeploymentArchiveImpl implements WildFlyBeanDeploymentArchive {
 
     private final Set<String> beanClasses;
 
+    private final Set<String> allKnownClasses;
+
     private final Set<BeanDeploymentArchive> beanDeploymentArchives;
 
     private final BeansXml beansXml;
@@ -81,12 +85,13 @@ public class BeanDeploymentArchiveImpl implements WildFlyBeanDeploymentArchive {
 
     private final BeanArchiveType beanArchiveType;
 
-    public BeanDeploymentArchiveImpl(Set<String> beanClasses, BeansXml beansXml, Module module, String id, BeanArchiveType beanArchiveType) {
-        this(beanClasses, beansXml, module, id, beanArchiveType, false);
+    public BeanDeploymentArchiveImpl(Set<String> beanClasses, Set<String> allClasses, BeansXml beansXml, Module module, String id, BeanArchiveType beanArchiveType) {
+        this(beanClasses, allClasses, beansXml, module, id, beanArchiveType, false);
     }
 
-    public BeanDeploymentArchiveImpl(Set<String> beanClasses, BeansXml beansXml, Module module, String id, BeanArchiveType beanArchiveType, boolean root) {
+    public BeanDeploymentArchiveImpl(Set<String> beanClasses, Set<String> allClasses, BeansXml beansXml, Module module, String id, BeanArchiveType beanArchiveType, boolean root) {
         this.beanClasses = new ConcurrentSkipListSet<String>(beanClasses);
+        this.allKnownClasses = new ConcurrentSkipListSet<String>(allClasses);
         this.beanDeploymentArchives = new CopyOnWriteArraySet<BeanDeploymentArchive>();
         this.beansXml = beansXml;
         this.id = id;
@@ -128,6 +133,7 @@ public class BeanDeploymentArchiveImpl implements WildFlyBeanDeploymentArchive {
 
     public void addBeanClass(String clazz) {
         this.beanClasses.add(clazz);
+        this.allKnownClasses.add(clazz);
     }
 
     public void addBeanClass(Class<?> clazz) {
@@ -240,6 +246,12 @@ public class BeanDeploymentArchiveImpl implements WildFlyBeanDeploymentArchive {
                 if (moduleDependency.getIdentifier().equals(that.getModule().getIdentifier())) {
                     return true;
                 }
+
+                // moduleDependency might be an alias - try to load it to get lined module
+                Module module = loadModule(moduleDependency);
+                if (module != null && module.getIdentifier().equals(that.getModule().getIdentifier())) {
+                    return true;
+                }
             }
         }
 
@@ -259,6 +271,19 @@ public class BeanDeploymentArchiveImpl implements WildFlyBeanDeploymentArchive {
         return false;
     }
 
+    private Module loadModule(ModuleDependencySpec moduleDependency) {
+        try {
+            ModuleLoader moduleLoader = moduleDependency.getModuleLoader();
+            if (moduleLoader == null) {
+                return null;
+            } else {
+                return moduleLoader.loadModule(moduleDependency.getIdentifier());
+            }
+        } catch (ModuleLoadException e) {
+            return null;
+        }
+    }
+
     public BeanArchiveType getBeanArchiveType() {
         return beanArchiveType;
     }
@@ -270,5 +295,10 @@ public class BeanDeploymentArchiveImpl implements WildFlyBeanDeploymentArchive {
         builder.append(this.id);
         builder.append(")");
         return builder.toString();
+    }
+
+    @Override
+    public Collection<String> getKnownClasses(){
+        return allKnownClasses;
     }
 }

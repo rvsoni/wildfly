@@ -21,10 +21,10 @@
  */
 package org.jboss.as.clustering.infinispan.subsystem;
 
-import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 import org.infinispan.configuration.cache.PersistenceConfiguration;
+import org.jboss.as.clustering.controller.BinaryCapabilityNameResolver;
 import org.jboss.as.clustering.controller.ChildResourceDefinition;
 import org.jboss.as.clustering.controller.ManagementResourceRegistration;
 import org.jboss.as.clustering.controller.MetricHandler;
@@ -43,7 +43,6 @@ import org.jboss.as.clustering.controller.transform.LegacyPropertyWriteOperation
 import org.jboss.as.clustering.controller.transform.SimpleOperationTransformer;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
-import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
 import org.jboss.as.controller.capability.RuntimeCapability;
@@ -51,6 +50,7 @@ import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.descriptions.ResourceDescriptionResolver;
 import org.jboss.as.controller.operations.global.MapOperations;
 import org.jboss.as.controller.registry.AttributeAccess;
+import org.jboss.as.controller.transform.description.DiscardAttributeChecker;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
@@ -75,38 +75,41 @@ public abstract class StoreResourceDefinition extends ChildResourceDefinition<Ma
         private final RuntimeCapability<Void> definition;
 
         Capability(String name, Class<?> type) {
-            this.definition = RuntimeCapability.Builder.of(name, true, type).build();
+            this.definition = RuntimeCapability.Builder.of(name, true).setServiceType(type).setDynamicNameMapper(BinaryCapabilityNameResolver.GRANDPARENT_PARENT).build();
         }
 
         @Override
         public RuntimeCapability<Void> getDefinition() {
             return this.definition;
         }
-
-        @Override
-        public RuntimeCapability<Void> resolve(PathAddress address) {
-            PathAddress cacheAddress = address.getParent();
-            PathAddress containerAddress = cacheAddress.getParent();
-            return this.definition.fromBaseCapability(containerAddress.getLastElement().getValue(), cacheAddress.getLastElement().getValue());
-        }
     }
 
-    enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        FETCH_STATE("fetch-state", true, UnaryOperator.identity()),
-        PASSIVATION("passivation", true, UnaryOperator.identity()),
-        PRELOAD("preload", false, UnaryOperator.identity()),
-        PURGE("purge", true, UnaryOperator.identity()),
-        SHARED("shared", false, UnaryOperator.identity()),
-        SINGLETON("singleton", false, builder -> builder.setDeprecated(InfinispanModel.VERSION_5_0_0.getVersion())),
+    enum Attribute implements org.jboss.as.clustering.controller.Attribute, UnaryOperator<SimpleAttributeDefinitionBuilder> {
+        FETCH_STATE("fetch-state", true),
+        MAX_BATCH_SIZE("max-batch-size", ModelType.INT, new ModelNode(100)),
+        PASSIVATION("passivation", true),
+        PRELOAD("preload", false),
+        PURGE("purge", true),
+        SHARED("shared", false),
+        SINGLETON("singleton", false) {
+            @Override
+            public SimpleAttributeDefinitionBuilder apply(SimpleAttributeDefinitionBuilder builder) {
+                return builder.setDeprecated(InfinispanModel.VERSION_5_0_0.getVersion());
+            }
+        },
         PROPERTIES("properties"),
         ;
         private final AttributeDefinition definition;
 
-        Attribute(String name, boolean defaultValue, UnaryOperator<SimpleAttributeDefinitionBuilder> configurator) {
-            this.definition = configurator.apply(new SimpleAttributeDefinitionBuilder(name, ModelType.BOOLEAN)
+        Attribute(String name, boolean defaultValue) {
+            this(name, ModelType.BOOLEAN, new ModelNode(defaultValue));
+        }
+
+        Attribute(String name, ModelType type, ModelNode defaultValue) {
+            this.definition = this.apply(new SimpleAttributeDefinitionBuilder(name, type)
                     .setAllowExpression(true)
                     .setRequired(false)
-                    .setDefaultValue(new ModelNode(defaultValue))
+                    .setDefaultValue(defaultValue)
                     .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
                     ).build();
         }
@@ -122,13 +125,16 @@ public abstract class StoreResourceDefinition extends ChildResourceDefinition<Ma
         public AttributeDefinition getDefinition() {
             return this.definition;
         }
+
+        @Override
+        public SimpleAttributeDefinitionBuilder apply(SimpleAttributeDefinitionBuilder builder) {
+            return builder;
+        }
     }
 
     static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder builder, PathElement path) {
-        if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
-            builder.discardChildResource(StoreWriteThroughResourceDefinition.PATH);
-        } else {
-            StoreWriteThroughResourceDefinition.buildTransformation(version, builder);
+        if (InfinispanModel.VERSION_6_0_0.requiresTransformation(version)) {
+            builder.getAttributeBuilder().setDiscard(DiscardAttributeChecker.ALWAYS, Attribute.MAX_BATCH_SIZE.getDefinition());
         }
 
         if (InfinispanModel.VERSION_3_0_0.requiresTransformation(version)) {
@@ -148,47 +154,45 @@ public abstract class StoreResourceDefinition extends ChildResourceDefinition<Ma
             }
         }
 
+        StoreWriteThroughResourceDefinition.buildTransformation(version, builder);
         StoreWriteBehindResourceDefinition.buildTransformation(version, builder);
     }
 
     private final PathElement legacyPath;
-    private final Consumer<ResourceDescriptor> descriptorConfigurator;
+    private final UnaryOperator<ResourceDescriptor> configurator;
     private final ResourceServiceHandler handler;
-    private final Consumer<ManagementResourceRegistration> registrationConfigurator;
 
-    @SuppressWarnings("deprecation")
-    StoreResourceDefinition(PathElement path, PathElement legacyPath, ResourceDescriptionResolver resolver, Consumer<ResourceDescriptor> descriptorConfigurator, ResourceServiceBuilderFactory<PersistenceConfiguration> builderFactory, Consumer<ManagementResourceRegistration> registrationConfigurator) {
+    StoreResourceDefinition(PathElement path, PathElement legacyPath, ResourceDescriptionResolver resolver, UnaryOperator<ResourceDescriptor> configurator, ResourceServiceBuilderFactory<PersistenceConfiguration> builderFactory) {
         super(path, resolver);
         this.legacyPath = legacyPath;
-        this.descriptorConfigurator = descriptorConfigurator.andThen(descriptor -> descriptor
+        this.configurator = configurator;
+        this.handler = new SimpleResourceServiceHandler<>(builderFactory);
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override
+    public ManagementResourceRegistration register(ManagementResourceRegistration parent) {
+        ManagementResourceRegistration registration = parent.registerSubModel(this);
+        if (this.legacyPath != null) {
+            parent.registerAlias(this.legacyPath, new SimpleAliasEntry(registration));
+        }
+
+        ResourceDescriptor descriptor = this.configurator.apply(new ResourceDescriptor(this.getResourceDescriptionResolver()))
                 .addAttributes(StoreResourceDefinition.Attribute.class)
                 .addCapabilities(Capability.class)
                 .addRequiredSingletonChildren(StoreWriteThroughResourceDefinition.PATH)
-        );
-        this.handler = new SimpleResourceServiceHandler<>(builderFactory);
-        this.registrationConfigurator = registrationConfigurator.andThen(registration -> {
-            if (registration.isRuntimeOnlyRegistrationValid()) {
-                new MetricHandler<>(new StoreMetricExecutor(), StoreMetric.class).register(registration);
-            }
-
-            new StoreWriteBehindResourceDefinition().register(registration);
-            new StoreWriteThroughResourceDefinition().register(registration);
-
-            new StorePropertyResourceDefinition().register(registration);
-        });
-    }
-
-    @Override
-    public void register(ManagementResourceRegistration parentRegistration) {
-        ManagementResourceRegistration registration = parentRegistration.registerSubModel(this);
-        if (this.legacyPath != null) {
-            parentRegistration.registerAlias(this.legacyPath, new SimpleAliasEntry(registration));
-        }
-
-        ResourceDescriptor descriptor = new ResourceDescriptor(this.getResourceDescriptionResolver());
-        this.descriptorConfigurator.accept(descriptor);
+                ;
         new SimpleResourceRegistration(descriptor, this.handler).register(registration);
 
-        this.registrationConfigurator.accept(registration);
+        if (registration.isRuntimeOnlyRegistrationValid()) {
+            new MetricHandler<>(new StoreMetricExecutor(), StoreMetric.class).register(registration);
+        }
+
+        new StoreWriteBehindResourceDefinition().register(registration);
+        new StoreWriteThroughResourceDefinition().register(registration);
+
+        new StorePropertyResourceDefinition().register(registration);
+
+        return registration;
     }
 }

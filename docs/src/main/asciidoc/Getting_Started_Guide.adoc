@@ -1,3 +1,4 @@
+[[Getting_Started_Guide]]
 = Getting Started Guide
 WildFly team;
 :revnumber: {version}
@@ -8,7 +9,7 @@ WildFly team;
 :doctype: book
 :icons: font
 :source-highlighter: coderay
-:wildflyVersion: 11
+:wildflyVersion: 12
 
 ifndef::ebook-format[:leveloffset: 1]
 
@@ -32,7 +33,7 @@ server configuration profiles.
 [cols=",,,,",options="header"]
 |=======================================================================
 |Java EE 7 Platform Technology |Java EE 7Full Profile |Java EE 7Web
-Profile |WildFly 10Full Profile |WildFly 10Web Profile
+Profile |WildFly 12 Full Profile |WildFly 12 Web Profile
 
 |JSR-356: Java API for Web Socket |X |X |X |X
 
@@ -111,13 +112,39 @@ default. If you want to use messaging, make sure you start the server
 using the "Full Profile" configuration.
 
 This document provides a quick overview on how to download and get
-started using WildFly 10 for your application development. For in-depth
-content on administrative features, refer to the WildFly 10 Admin Guide.
+started using WildFly 12 for your application development. For in-depth
+content on administrative features, refer to the WildFly 12 Admin Guide.
+
+[[ee8-preview]]
+=== EE8 Preview ===
+By default, WildFly supports Java EE7. We aim to support Java EE8 in the
+future. As we implement Java EE8, and the technologies become available, we offer a preview of these.
+To turn on the Java EE8 preview for these technologies, start the server with `-Dee8.preview.mode=true`.
+Alternatively you can launch with the `standalone-ee8.xml` configuration, which has this property already set.
+Once enabled, this setting will switch the technologies
+as shown in the table below. Note that Java EE8 technologies not listed in the table below
+will remain at Java EE7 level.
+
+[cols=",,,,",options="header"]
+|=======================================================================
+| Name | From Version | From JSR | To Version | To JSR
+
+| Java Servlet | 3.1 | JSR-340 | 4.0 | https://jcp.org/en/jsr/detail?id=370[JSR-369]
+| Contexts and Dependency Injection for Java | 1.2 | JSR-346 | 2.0 | https://jcp.org/en/jsr/detail?id=365[JSR-365]
+| Bean Validation | 1.1 | JSR-349 | 2.0 | https://jcp.org/en/jsr/detail?id=380[JSR-380]
+| JavaServer Faces | 2.2 | JSR-344 | 2.3 | https://jcp.org/en/jsr/detail?id=372[JSR-372]
+| JavaMail | 1.5 | JSR-919 | 1.6 | https://jcp.org/en/jsr/detail?id=919[JSR-919]
+| Java API for RESTFul Web Services | 2.0 | JSR-339 | 2.1 | https://jcp.org/en/jsr/detail?id=370[JSR-370]
+| Java API for JSON Processing | 1.0 | JSR-353 | 1.1 | https://jcp.org/en/jsr/detail?id=374[JSR-374]
+| Java API for JSON Binding | - | - | 1.0 | https://jcp.org/en/jsr/detail?id=367[JSR-367]
+| Common Annotations for the Java Platform | 1.2 | JSR-250 | 1.3 | http://download.oracle.com/otndocs/jcp/common_annotations-1_3-mrel3-spec/[JSR-250]
+| Java EE Security API | - | - | 1.0 | https://jcp.org/aboutJava/communityprocess/final/jsr375/index.html[JSR-375]
+|=======================================================================
 
 [[download]]
 === Download
 
-WildFly 10 distributions can be obtained from:
+WildFly 12 distributions can be obtained from:
 
 http://www.wildfly.org/downloads/[wildfly.org/downloads]
 
@@ -137,14 +164,14 @@ available)
 === Installation
 
 Simply extract your chosen download to the directory of your choice. You
-can install WildFly 10 on any operating system that supports the zip or
+can install WildFly 12 on any operating system that supports the zip or
 tar formats. Refer to the Release Notes for additional information
 related to the release.
 
 [[wildfly---a-quick-tour]]
 === WildFly - A Quick Tour
 
-Now that you've downloaded WildFly 10, the next thing to discuss is the
+Now that you've downloaded WildFly 12, the next thing to discuss is the
 layout of the distribution and explore the server directory structure,
 key configuration files, log files, user deployments and so on. It's
 worth familiarizing yourself with the layout so that you'll be able to
@@ -186,7 +213,7 @@ used by the single standalone server run from this installation.
 [[standalone-directory-structure]]
 ===== Standalone Directory Structure
 
-In " *_standalone_* " mode each WildFly 10 server instance is an
+In " *_standalone_* " mode each WildFly 12 server instance is an
 independent process (similar to previous JBoss AS versions; e.g., 3, 4,
 5, or 6). The configuration files, deployment content and writable areas
 used by the single standalone server run from a WildFly installation are
@@ -226,7 +253,7 @@ process.
 [[domain-directory-structure]]
 ===== Domain Directory Structure
 
-A key feature of WildFly 10 is the managing multiple servers from a
+A key feature of WildFly 12 is the managing multiple servers from a
 single control point. A collection of multiple servers are referred to
 as a " *_domain_* ". Domains can span multiple physical (or virtual)
 machines with all WildFly instances on a given host under the control of
@@ -276,14 +303,18 @@ process.
 |=======================================================================
 
 [[wildfly-10-configurations]]
-==== WildFly 10 Configurations
+==== WildFly 12 Configurations
 
 [[standalone-server-configurations]]
 ===== Standalone Server Configurations
 
-* standalone.xml ( _default_)
+* standalone.xml (_default_)
 ** Java Enterprise Edition 7 web profile certified configuration with
 the required technologies plus those noted in the table above.
+
+* standalone-ee8.xml
+** Java EE8 Preview mode. Same as standalone.xml, but with EE8
+technologies enabled.
 
 * standalone-ha.xml
 ** Java Enterprise Edition 7 web profile certified configuration with
@@ -309,9 +340,9 @@ determine how the servers are managed not what capabilities they
 provide.
 
 [[starting-wildfly-10]]
-==== Starting WildFly 10
+==== Starting WildFly 12
 
-To start WildFly 10 using the default web profile configuration in "
+To start WildFly 12 using the default web profile configuration in "
 _standalone_" mode, change directory to $JBOSS_HOME/bin.
 
 [source]
@@ -391,21 +422,20 @@ discussion in the user forum and access the enhanced web-based
 Administration Console. Or, if you uncover a defect while using WildFly,
 report an issue to inform us (attached patches will be reviewed). This
 landing page is recommended for convenient access to information about
-WildFly 10 but can easily be replaced with your own if desired.
+WildFly 12 but can easily be replaced with your own if desired.
 
 [[managing-your-wildfly-10]]
-==== Managing your WildFly 10
+==== Managing your WildFly 12
 
-WildFly 10 offers two administrative mechanisms for managing your
+WildFly 12 offers two administrative mechanisms for managing your
 running instance:
 
 * web-based Administration Console
 * command-line interface
 
-[[authentication]]
 ===== Authentication
 
-By default WildFly 10 is now distributed with security enabled for the
+By default WildFly 12 is now distributed with security enabled for the
 management interfaces, this means that before you connect using the
 administration console or remotely using the CLI you will need to add a
 new user, this can be achieved simply by using the _add-user.sh_ script
@@ -581,7 +611,7 @@ http://docs.jboss.org/ironjacamar/userguide/1.0/en-US/html/deployment.html#deplo
 ===== Configure Logging in WildFly
 
 WildFly logging can be configured with the web console or the command
-line interface. You can get more detail on the link:#src-557127[Logging
+line interface. You can get more detail on the link:Admin_Guide{outfilesuffix}#Logging[Logging
 Configuration] page.
 
 Turn on debugging for a specific category with CLI:

@@ -51,7 +51,7 @@ import org.jboss.modules.ModuleLoadException;
 import org.jboss.modules.ModuleLoader;
 import org.jboss.msc.service.ServiceController;
 import org.jboss.msc.service.ServiceRegistry;
-import org.jgroups.Channel;
+import org.jgroups.JChannel;
 import org.jgroups.protocols.TP;
 import org.jgroups.protocols.relay.RELAY2;
 import org.jgroups.stack.Protocol;
@@ -75,7 +75,7 @@ public class ChannelRuntimeResourceRegistration implements RuntimeResourceRegist
         ServiceRegistry registry = context.getServiceRegistry(false);
         ServiceController<?> controller = registry.getService(JGroupsRequirement.CHANNEL.getServiceName(context, channelName));
         if (controller != null) {
-            Channel channel = (Channel) controller.getValue();
+            JChannel channel = (JChannel) controller.getValue();
             if (channel != null) {
                 controller = registry.getService(JGroupsRequirement.CHANNEL_SOURCE.getServiceName(context, channelName));
                 ChannelFactory factory = (ChannelFactory) controller.getValue();
@@ -147,7 +147,9 @@ public class ChannelRuntimeResourceRegistration implements RuntimeResourceRegist
 
     @Override
     public void unregister(OperationContext context) {
-        context.readResource(PathAddress.EMPTY_ADDRESS).getChildrenNames(ProtocolResourceDefinition.WILDCARD_PATH.getKey()).forEach(name -> context.removeResource(PathAddress.pathAddress(ProtocolResourceDefinition.pathElement(name))));
+        for (String name : context.readResource(PathAddress.EMPTY_ADDRESS).getChildrenNames(ProtocolResourceDefinition.WILDCARD_PATH.getKey())) {
+            context.removeResource(PathAddress.pathAddress(ProtocolResourceDefinition.pathElement(name)));
+        }
         context.getResourceRegistrationForUpdate().unregisterOverrideModel(context.getCurrentAddressValue());
     }
 

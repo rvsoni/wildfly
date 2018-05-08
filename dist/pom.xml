@@ -30,7 +30,11 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-parent</artifactId>
-        <version>12.0.0.Alpha1-SNAPSHOT</version>
+        <!--
+        Maintain separation between the artifact id and the version to help prevent
+        merge conflicts between commits changing the GA and those changing the V.
+        -->
+        <version>13.0.0.Alpha1-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-dist</artifactId>
@@ -38,13 +42,13 @@
     <packaging>jar</packaging>
     <dependencies>
         <dependency>
-            <groupId>org.wildfly</groupId>
+            <groupId>${project.groupId}</groupId>
             <artifactId>wildfly-feature-pack</artifactId>
             <type>pom</type>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.wildfly</groupId>
+            <groupId>${project.groupId}</groupId>
             <artifactId>wildfly-feature-pack</artifactId>
             <type>zip</type>
             <exclusions>
@@ -54,17 +58,27 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.metadata</groupId>
+            <artifactId>jboss-metadata-common</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <properties>
         <product.release.name>WildFly Full</product.release.name>
         <verifier.slot.name>wildfly-full</verifier.slot.name>
         <verifier.product.release.name>WildFly Full</verifier.product.release.name>
-        <verifier.product.release.version>12.0</verifier.product.release.version>
+        <verifier.product.release.version>13.0</verifier.product.release.version>
     </properties>
 
     <build>
-        <finalName>${server.output.dir.prefix}-${jboss.as.release.version}</finalName>
+        <finalName>${server.output.dir.prefix}-${server.output.dir.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.wildfly.build</groupId>
@@ -120,11 +134,43 @@
                             </resources>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>ts.copy-widfly-for-validation</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <inherited>true</inherited>
+                        <configuration>
+                            <outputDirectory>${basedir}/target/xml-validation</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${basedir}/target/${project.build.finalName}</directory>
+                                    <includes>
+                                        <include>docs/**/*.xml</include>
+                                        <include>docs/**/*.xsd</include>
+                                        <include>standalone/**/*.xml</include>
+                                        <include>domain/**/*.xml</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-verifier-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Parameters to test cases. -->
+                    <systemPropertyVariables combine.children="append">
+                        <jboss.dist>${basedir}/target/xml-validation</jboss.dist>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -202,10 +248,10 @@
                                 <phase>prepare-package</phase>
                                 <configuration>
                                     <tasks>
-                                        <fileset id="licenses.xml.list" dir="${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses" includes="*licenses.xml"/>
+                                        <fileset id="licenses.xml.list" dir="${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses" includes="*licenses.xml"/>
                                         <!--
                                         <property name="prop.licenses.xml.list" refid="licenses.xml.list"/>
-                                        <echo>List of licenses.xml in ${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses</echo>
+                                        <echo>List of licenses.xml in ${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses</echo>
                                         <echo>${prop.licenses.xml.list}</echo>
                                         -->
                                         <pathconvert pathsep="&#xA;" property="license-files-list-items" refid="licenses.xml.list">
@@ -215,9 +261,9 @@
                                                 <globmapper from="*" to="*&lt;/item&gt;"/>
                                             </chainedmapper>
                                         </pathconvert>
-                                        <echo file="${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses/licenses.xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;&#xA;&lt;list&gt;&#xA;</echo>
-                                        <echo file="${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses/licenses.xml" append="true">${license-files-list-items}&#xA;</echo>
-                                        <echo file="${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses/licenses.xml" append="true">&lt;/list&gt;</echo>
+                                        <echo file="${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses/licenses.xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;&#xA;&lt;list&gt;&#xA;</echo>
+                                        <echo file="${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses/licenses.xml" append="true">${license-files-list-items}&#xA;</echo>
+                                        <echo file="${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses/licenses.xml" append="true">&lt;/list&gt;</echo>
                                     </tasks>
                                 </configuration>
                                 <goals>
@@ -241,12 +287,12 @@
                                 <configuration>
                                     <transformationSets>
                                         <transformationSet>
-                                            <dir>${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses</dir>
+                                            <dir>${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses</dir>
                                             <includes>
                                                 <include>licenses.xml</include>
                                             </includes>
-                                            <stylesheet>${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses/licenses-merged.xsl</stylesheet>
-                                            <outputDir>${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses</outputDir>
+                                            <stylesheet>${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses/licenses-merged.xsl</stylesheet>
+                                            <outputDir>${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses</outputDir>
                                             <fileMappers>
                                                 <fileMapper implementation="org.codehaus.plexus.components.io.filemappers.FileExtensionMapper">
                                                     <targetExtension>.xml</targetExtension>
@@ -254,12 +300,12 @@
                                             </fileMappers>
                                         </transformationSet>
                                         <transformationSet>
-                                            <dir>${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses</dir>
+                                            <dir>${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses</dir>
                                             <includes>
                                                 <include>licenses.xml</include>
                                             </includes>
-                                            <stylesheet>${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses/licenses.xsl</stylesheet>
-                                            <outputDir>${basedir}/target/${server.output.dir.prefix}-${jboss.as.release.version}/docs/licenses</outputDir>
+                                            <stylesheet>${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses/licenses.xsl</stylesheet>
+                                            <outputDir>${basedir}/target/${server.output.dir.prefix}-${server.output.dir.version}/docs/licenses</outputDir>
                                             <fileMappers>
                                                 <fileMapper implementation="org.codehaus.plexus.components.io.filemappers.FileExtensionMapper">
                                                     <targetExtension>.html</targetExtension>

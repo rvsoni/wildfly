@@ -27,7 +27,6 @@ import static org.jboss.as.clustering.infinispan.subsystem.JGroupsTransportResou
 import org.infinispan.configuration.global.GlobalConfigurationBuilder;
 import org.infinispan.configuration.global.SiteConfiguration;
 import org.infinispan.configuration.global.SiteConfigurationBuilder;
-import org.jboss.as.clustering.dmr.ModelNodes;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
@@ -48,8 +47,8 @@ public class SiteBuilder extends GlobalComponentBuilder<SiteConfiguration> {
 
     private volatile ValueDependency<ChannelFactory> factory;
 
-    public SiteBuilder(PathAddress containerAddress) {
-        super(CacheContainerComponent.SITE, containerAddress);
+    public SiteBuilder(PathAddress address) {
+        super(CacheContainerComponent.SITE, address);
     }
 
     @Override
@@ -60,7 +59,7 @@ public class SiteBuilder extends GlobalComponentBuilder<SiteConfiguration> {
 
     @Override
     public Builder<SiteConfiguration> configure(OperationContext context, ModelNode model) throws OperationFailedException {
-        String channel = ModelNodes.optionalString(CHANNEL.resolveModelAttribute(context, model)).orElse(null);
+        String channel = CHANNEL.resolveModelAttribute(context, model).asStringOrNull();
         this.factory = new InjectedValueDependency<>(JGroupsRequirement.CHANNEL_SOURCE.getServiceName(context, channel), ChannelFactory.class);
         return this;
     }
@@ -69,7 +68,7 @@ public class SiteBuilder extends GlobalComponentBuilder<SiteConfiguration> {
     public SiteConfiguration getValue() {
         SiteConfigurationBuilder builder = new GlobalConfigurationBuilder().site();
         if (this.factory != null) {
-            RelayConfiguration relay = this.factory.getValue().getProtocolStackConfiguration().getRelay();
+            RelayConfiguration relay = this.factory.getValue().getProtocolStackConfiguration().getRelay().orElse(null);
             if (relay != null) {
                 builder.localSite(relay.getSiteName());
             }

@@ -22,6 +22,7 @@
 
 package org.wildfly.extension.undertow;
 
+import io.undertow.connector.ByteBufferPool;
 import io.undertow.security.api.AuthenticationMechanismFactory;
 import io.undertow.server.handlers.cache.DirectBufferCache;
 import io.undertow.servlet.api.CrawlerSessionManagerConfig;
@@ -34,10 +35,8 @@ import org.jboss.msc.service.StartContext;
 import org.jboss.msc.service.StartException;
 import org.jboss.msc.service.StopContext;
 import org.jboss.msc.value.InjectedValue;
-import org.xnio.Pool;
 import org.xnio.XnioWorker;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -69,7 +68,7 @@ public class ServletContainerService implements Service<ServletContainerService>
     private final CrawlerSessionManagerConfig crawlerSessionManagerConfig;
 
     private final boolean websocketsEnabled;
-    private final InjectedValue<Pool<ByteBuffer>> websocketsBufferPool = new InjectedValue<>();
+    private final InjectedValue<ByteBufferPool> websocketsBufferPool = new InjectedValue<>();
     private final InjectedValue<XnioWorker> websocketsWorker = new InjectedValue<>();
     private final boolean dispatchWebsocketInvocationToWorker;
     private final boolean perMessageDeflate;
@@ -85,13 +84,14 @@ public class ServletContainerService implements Service<ServletContainerService>
     private final int fileCacheMetadataSize;
     private final int fileCacheMaxFileSize;
     private final Integer fileCacheTimeToLive;
+    private final int defaultCookieVersion;
 
     public ServletContainerService(boolean allowNonStandardWrappers, ServletStackTraces stackTraces, SessionCookieConfig sessionCookieConfig, JSPConfig jspConfig,
                                    String defaultEncoding, boolean useListenerEncoding, boolean ignoreFlush, boolean eagerFilterInit, int defaultSessionTimeout,
                                    boolean disableCachingForSecuredPages, boolean websocketsEnabled, boolean dispatchWebsocketInvocationToWorker, boolean perMessageDeflate,
                                    int deflaterLevel, Map<String, String> mimeMappings, List<String> welcomeFiles, Boolean directoryListingEnabled, boolean proactiveAuth,
                                    int sessionIdLength, Map<String, AuthenticationMechanismFactory> authenticationMechanisms, Integer maxSessions,
-                                   CrawlerSessionManagerConfig crawlerSessionManagerConfig, boolean disableFileWatchService, boolean disableSessionIdReuse, int fileCacheMetadataSize, int fileCacheMaxFileSize, Integer fileCacheTimeToLive) {
+                                   CrawlerSessionManagerConfig crawlerSessionManagerConfig, boolean disableFileWatchService, boolean disableSessionIdReuse, int fileCacheMetadataSize, int fileCacheMaxFileSize, Integer fileCacheTimeToLive, int defaultCookieVersion) {
 
         this.allowNonStandardWrappers = allowNonStandardWrappers;
         this.stackTraces = stackTraces;
@@ -120,6 +120,7 @@ public class ServletContainerService implements Service<ServletContainerService>
         this.fileCacheMetadataSize = fileCacheMetadataSize;
         this.fileCacheMaxFileSize = fileCacheMaxFileSize;
         this.fileCacheTimeToLive = fileCacheTimeToLive;
+        this.defaultCookieVersion = defaultCookieVersion;
     }
 
     @Override
@@ -181,7 +182,7 @@ public class ServletContainerService implements Service<ServletContainerService>
         return websocketsWorker;
     }
 
-    public InjectedValue<Pool<ByteBuffer>> getWebsocketsBufferPool() {
+    public InjectedValue<ByteBufferPool> getWebsocketsBufferPool() {
         return websocketsBufferPool;
     }
 
@@ -272,5 +273,9 @@ public class ServletContainerService implements Service<ServletContainerService>
 
     public Integer getFileCacheTimeToLive() {
         return fileCacheTimeToLive;
+    }
+
+    public int getDefaultCookieVersion() {
+        return defaultCookieVersion;
     }
 }

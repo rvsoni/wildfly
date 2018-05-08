@@ -49,7 +49,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class ReplicationForNegotiationAuthenticatorTestCase extends AbstractWebFailoverTestCase {
-    private static final String DEPLOYMENT_NAME = "negotiationAuthenticator.war";
+
+    private static final String MODULE_NAME = ReplicationForNegotiationAuthenticatorTestCase.class.getSimpleName();
+    private static final String DEPLOYMENT_NAME = MODULE_NAME + ".war";
 
     public ReplicationForNegotiationAuthenticatorTestCase() {
         super(DEPLOYMENT_NAME, TransactionMode.TRANSACTIONAL);
@@ -57,16 +59,21 @@ public class ReplicationForNegotiationAuthenticatorTestCase extends AbstractWebF
 
     @Deployment(name = DEPLOYMENT_1, managed = false, testable = false)
     @TargetsContainer(NODE_1)
-    public static Archive<?> deployment0() {
+    public static Archive<?> deployment1() {
         return getDeployment();
     }
 
     @Deployment(name = DEPLOYMENT_2, managed = false, testable = false)
     @TargetsContainer(NODE_2)
-    public static Archive<?> deployment1() {
+    public static Archive<?> deployment2() {
         return getDeployment();
     }
 
+    @Deployment(name = DEPLOYMENT_3, managed = false, testable = false)
+    @TargetsContainer(NODE_3)
+    public static Archive<?> deployment3() {
+        return getDeployment();
+    }
     private static Archive<?> getDeployment() {
         WebArchive war = ShrinkWrap.create(WebArchive.class, DEPLOYMENT_NAME);
         war.addClasses(SimpleServlet.class, Mutable.class);
